@@ -1,0 +1,3267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LiteCord</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="theme-color" content="#1e1f22">
+<style>
+/* Themes. Same names as Discord's free ones; colors picked for LiteCord. */
+:root,[data-theme=dark]{--rail:#121214;--side:#18181b;--main:#1d1e21;--panel:#141416;--float:#111113;--input:#25262a;--field:#121214;--hover:#26272b;--active:#303136;--msghover:#212226;--btn2:#2e2f35;--code:#141518;--border:#2a2b30;--text:#dbdee1;--strong:#f2f3f5;--muted:#949ba4;--call:#000;--tile:#232428;--shadow:#0009}
+[data-theme=ash]{--rail:#1e1f22;--side:#2b2d31;--main:#313338;--panel:#232428;--float:#111214;--input:#383a40;--field:#1e1f22;--hover:#35373c;--active:#404249;--msghover:#2e3035;--btn2:#4e5058;--code:#2b2d31;--border:#26272b;--text:#dbdee1;--strong:#f2f3f5;--muted:#949ba4;--call:#000;--tile:#2b2d31;--shadow:#0008}
+[data-theme=onyx]{--rail:#000;--side:#09090a;--main:#060607;--panel:#0c0c0e;--float:#141416;--input:#16161a;--field:#0c0c0e;--hover:#151518;--active:#1f1f24;--msghover:#0d0d10;--btn2:#232328;--code:#101013;--border:#1a1a1e;--text:#dbdee1;--strong:#f2f3f5;--muted:#8e939b;--call:#000;--tile:#141418;--shadow:#000c}
+[data-theme=light]{--rail:#e3e5e8;--side:#f2f3f5;--main:#fff;--panel:#ebedef;--float:#fff;--input:#ebedef;--field:#e3e5e8;--hover:#e6e7e9;--active:#d7d9dc;--msghover:#f5f5f6;--btn2:#d4d7dc;--code:#f2f3f5;--border:#e1e2e4;--text:#313338;--strong:#060607;--muted:#5c5e66;--call:#111214;--tile:#2b2d31;--shadow:#0003}
+:root{--accent:#5865f2;--green:#23a55a;--red:#da373c;--yellow:#f0b232;--fs:15px;--gap:14px}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%;background:var(--main);color:var(--text);font:var(--fs)/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+html.reduce *{transition:none!important;animation:none!important;scroll-behavior:auto!important}
+button,select,input,textarea{font:inherit;color:inherit}
+a{color:#00a8fc}
+#join{position:fixed;inset:0;display:grid;place-items:center;background:var(--rail)}
+#join form{background:var(--side);padding:28px;border-radius:8px;width:min(340px,92vw);display:grid;gap:10px}
+#join h1{margin:0 0 6px;font-size:22px;text-align:center}
+#join label,.field>label:not(.chk),.sub{font-size:12px;font-weight:700;text-transform:uppercase;color:var(--muted)}
+input,select,textarea{background:var(--field);border:0;border-radius:4px;padding:10px;outline:none;width:100%}
+input[type=range],input[type=checkbox],input[type=radio]{width:auto;padding:0;accent-color:var(--accent)}
+.btn{background:var(--btn2);border:0;border-radius:4px;padding:7px 10px;cursor:pointer;width:100%;font-size:14px;display:flex;align-items:center;justify-content:center;gap:6px}
+.btn:hover:not(:disabled){filter:brightness(1.12)}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.primary{background:var(--accent);color:#fff} .btn.on{background:var(--green);color:#fff} .btn.danger{background:var(--red);color:#fff}
+.mini{background:var(--btn2);border:0;border-radius:4px;cursor:pointer;font-size:12px;padding:2px 7px}
+.mini:hover{filter:brightness(1.2)}
+.dim{color:var(--muted)} .tiny{font-size:12px;color:var(--muted)}
+.ico{width:20px;height:20px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ib{background:none;border:0;color:var(--muted);cursor:pointer;padding:6px;border-radius:4px;display:grid;place-items:center;flex:none}
+.ib:hover{background:var(--hover);color:var(--text)}
+.ib.off{color:#f23f42} .ib.active{color:var(--text)} .ib.on-green{color:var(--green)}
+
+#app{display:none;height:100%;grid-template-columns:72px 240px minmax(0,1fr) auto}
+#app.show{display:grid}
+#rail{background:var(--rail);display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 0;overflow-y:auto;scrollbar-width:none}
+.srv{position:relative;width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:var(--side);color:var(--text);font-weight:700;cursor:pointer;border:0;transition:border-radius .15s,background .15s;font-size:15px;flex:none}
+.srv:hover,.srv.active{border-radius:16px;background:var(--accent);color:#fff}
+.srv.add{color:var(--green)} .srv.add:hover{background:var(--green);color:#fff}
+.srv::before{content:"";position:absolute;left:-12px;width:4px;height:0;border-radius:0 4px 4px 0;background:var(--strong);transition:height .15s}
+.srv:hover::before{height:20px} .srv.active::before{height:40px}
+.railsep{width:32px;height:2px;background:var(--hover);border-radius:1px;flex:none}
+#left{background:var(--side);display:flex;flex-direction:column;min-height:0}
+#roomBar{height:48px;padding:0 12px 0 16px;font-weight:700;border:0;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;background:none;cursor:pointer;text-align:left;flex:none}
+#roomBar:hover{background:var(--hover)}
+#roomName{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#side{flex:1;overflow:auto;padding:0 8px 12px}
+.cat{display:flex;align-items:center;justify-content:space-between;padding:16px 4px 4px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase}
+.cat .ib{padding:2px} .cat .ico{width:16px;height:16px}
+.ch{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:4px;color:var(--muted);cursor:pointer;min-height:32px;user-select:none}
+.ch .ico{width:18px;height:18px}
+.ch:hover{background:var(--hover);color:var(--text)}
+.ch.active{background:var(--active);color:var(--strong)}
+.ch.unread{color:var(--strong);font-weight:600}
+.ch.muted{opacity:.45}
+.ch .gear{visibility:hidden;padding:2px} .ch .gear .ico{width:16px;height:16px}
+.ch:hover .gear,.ch.active .gear{visibility:visible}
+.cn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{background:var(--red);color:#fff;border-radius:8px;font-size:11px;padding:0 6px;font-weight:700}
+.live{background:var(--red);color:#fff;border-radius:4px;font-size:10px;padding:1px 5px;font-weight:800;letter-spacing:.3px}
+.members{padding-left:20px}
+.mem{display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:4px;font-size:14px;cursor:pointer;color:var(--muted)}
+.mem:hover{background:var(--hover);color:var(--text)}
+.sub{padding:12px 8px 4px}
+.avw{position:relative;display:inline-grid;flex:none}
+.av{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-weight:700;flex:none;border:2px solid transparent;font-size:13px;color:#fff}
+.mem .av{width:22px;height:22px;font-size:11px}
+.speaking .av{border-color:var(--green);box-shadow:0 0 0 1px var(--green)}
+.sdot{position:absolute;right:-2px;bottom:-2px;width:12px;height:12px;border-radius:50%;border:3px solid var(--side);background:var(--green)}
+.sdot.idle{background:var(--yellow)} .sdot.dnd{background:var(--red)} .sdot.invisible,.sdot.offline{background:var(--muted)}
+.nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ic{font-size:12px;white-space:nowrap}
+
+/* voice panel (bottom left) */
+#voicePanel{padding:10px 8px 8px;display:grid;gap:8px;background:var(--panel);border-bottom:1px solid var(--border)}
+#vpTop{display:flex;align-items:center;gap:8px}
+#vpSignal{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;background:#23a55a1f;color:var(--green);flex:none}
+#vpSignal.bad{background:#da373c1f;color:#f23f42}
+#vpInfo{flex:1;min-width:0}
+#vpState{color:var(--green);font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#vpSignal.bad+#vpInfo #vpState{color:#f23f42}
+#vpName{display:block;background:none;border:0;padding:0;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;max-width:100%;text-align:left}
+#vpName:hover{text-decoration:underline;color:var(--text)}
+#vpBtns{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.vbtn{height:36px;border:0;border-radius:8px;background:var(--btn2);color:var(--text);display:grid;place-items:center;cursor:pointer}
+.vbtn:hover:not(:disabled){filter:brightness(1.2)}
+.vbtn:disabled{opacity:.35;cursor:default}
+.vbtn.on{background:var(--green);color:#fff}
+#stageRow{display:flex;gap:6px}
+#userBar{display:flex;align-items:center;gap:2px;padding:8px;background:var(--panel);flex:none}
+#meBtn{display:flex;align-items:center;gap:8px;flex:1;min-width:0;background:none;border:0;border-radius:6px;padding:2px 4px;cursor:pointer;text-align:left}
+#meBtn:hover{background:var(--hover)}
+#meBtn .sdot{border-color:var(--panel)}
+#meInfo{min-width:0}
+#myName{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#status{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#userBar .ib{padding:6px}
+
+main{display:flex;flex-direction:column;min-height:0;min-width:0;background:var(--main)}
+#chHead{height:48px;padding:0 8px 0 16px;font-weight:700;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;flex:none}
+#chTitle{flex:1;display:flex;gap:8px;align-items:center;min-width:0;white-space:nowrap;overflow:hidden}
+#chTitle .ico{color:var(--muted)}
+#chTitle button{background:none;border:0;color:var(--muted);cursor:pointer;padding:0;font-weight:700;display:flex;gap:6px;align-items:center}
+#chTitle button:hover{color:var(--text)}
+#chTools{display:flex;align-items:center;gap:2px}
+#search{width:160px;padding:5px 8px;font-size:13px;margin-left:6px;transition:width .15s}
+#search:focus{width:240px}
+#view{flex:1;display:flex;flex-direction:column;min-height:0}
+.dropping #view{outline:2px dashed var(--accent);outline-offset:-8px}
+#msgs{flex:1;overflow:auto;padding:16px 0 12px}
+.msg{display:grid;grid-template-columns:40px minmax(0,1fr);column-gap:14px;padding:2px 48px 2px 16px;position:relative}
+.msg:not(.cont){margin-top:var(--gap)}
+.msg:hover{background:var(--msghover)}
+.msg.mention{background:#f0b23214;box-shadow:inset 2px 0 var(--yellow)}
+.msg.mention:hover{background:#f0b2321f}
+.msg.flash{animation:flash 1.6s}
+@keyframes flash{from{background:#5865f255}}
+.gut .av{width:40px;height:40px;font-size:16px;cursor:pointer}
+.gut time{visibility:hidden;font-size:11px;color:var(--muted);display:block;text-align:right;padding-top:3px}
+.msg:hover .gut time{visibility:visible}
+.hd b{margin-right:6px;cursor:pointer}
+.hd b:hover{text-decoration:underline}
+.hd time{font-size:12px;color:var(--muted)}
+.tx{white-space:pre-wrap;word-wrap:break-word}
+.edited{font-size:11px;color:var(--muted)}
+.mtag{background:#5865f23d;color:var(--accent);border-radius:3px;padding:0 2px;font-weight:500}
+[data-theme]:not([data-theme=light]) .mtag{color:#c9cdfb}
+.replyline{grid-column:2;display:flex;gap:6px;align-items:center;font-size:13px;color:var(--muted);cursor:pointer;position:relative;min-width:0}
+.replyline::before{content:"";position:absolute;left:-34px;top:9px;width:28px;height:8px;border-left:2px solid var(--btn2);border-top:2px solid var(--btn2);border-top-left-radius:6px}
+.replyline:hover{color:var(--text)}
+.replyline b{flex:none}
+.tools{position:absolute;right:16px;top:-16px;display:none;background:var(--side);border:1px solid var(--border);border-radius:6px;box-shadow:0 2px 8px var(--shadow);padding:2px;z-index:2}
+.tools .ib{padding:4px} .tools .qe{font-size:18px;line-height:1;width:30px}
+.msg:hover .tools{display:flex}
+.reacts{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.rc{display:inline-flex;gap:5px;align-items:center;background:var(--side);border:1px solid transparent;border-radius:8px;padding:1px 8px;cursor:pointer;font-size:14px;min-height:26px}
+.rc:hover{border-color:var(--btn2)}
+.rc.mine{background:#5865f230;border-color:var(--accent)}
+.rc .ico{width:16px;height:16px;color:var(--muted)}
+.editbox{resize:none;background:var(--input);margin-top:2px;max-height:40vh}
+.sys{color:var(--muted);font-size:13px;margin:8px 16px;font-style:italic}
+.empty{margin:auto;color:var(--muted)}
+.att-img{max-width:min(400px,100%);max-height:300px;border-radius:6px;display:block;margin-top:4px}
+.att-vid{max-width:min(480px,100%);max-height:320px;border-radius:6px;display:block;margin-top:4px;background:#000}
+.att-file{display:inline-flex;gap:6px;margin-top:4px;padding:10px 12px;background:var(--side);border:1px solid var(--border);border-radius:6px;text-decoration:none}
+.icode{background:var(--code);border-radius:3px;padding:1px 4px;font:.85em/1.3 ui-monospace,Consolas,monospace}
+.codeblock{background:var(--code);border:1px solid var(--border);border-radius:4px;padding:8px 10px;margin:4px 0;white-space:pre-wrap;word-break:break-word;font:.85em/1.45 ui-monospace,Consolas,monospace;max-width:100%}
+.quote{border-left:4px solid var(--btn2);padding-left:10px;margin:2px 0}
+.spoiler{background:var(--rail);border-radius:3px;cursor:pointer;color:transparent;padding:0 2px}
+.spoiler *{visibility:hidden}
+.spoiler.shown{background:#8881;color:inherit;cursor:auto}
+.spoiler.shown *{visibility:visible}
+#compWrap{position:relative;margin:0 16px}
+#replyBar{background:var(--side);border-radius:8px 8px 0 0;padding:4px 4px 4px 14px;font-size:13px;color:var(--muted);display:flex;align-items:center}
+#replyBar span{flex:1}
+#replyBar .ib .ico{width:16px;height:16px}
+#composer{display:flex;gap:2px;background:var(--input);border-radius:8px;padding:0 6px;align-items:flex-end}
+#replyBar:not([hidden])+#composer{border-radius:0 0 8px 8px}
+#composer textarea{background:none;padding:11px 4px;resize:none;max-height:40vh;line-height:1.4}
+#composer .ib{margin-bottom:5px}
+#typing{height:22px;font-size:12px;padding:2px 16px 4px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#uploads{padding:0 16px;font-size:13px;color:var(--muted)}
+.ac{position:absolute;bottom:calc(100% + 6px);left:0;right:0;background:var(--side);border-radius:8px;padding:6px;box-shadow:0 4px 16px var(--shadow);z-index:5}
+.ac .sub{padding:4px 8px}
+.acrow{padding:6px 8px;border-radius:4px;cursor:pointer}
+.acrow.sel,.acrow:hover{background:var(--active)}
+.forum{overflow:auto;padding:16px;flex:1}
+.newpost{display:grid;gap:8px;background:var(--side);padding:12px;border-radius:8px;margin-bottom:16px}
+.newpost textarea{resize:vertical}
+.newpost .btn{justify-self:end;width:auto;padding:8px 18px}
+.post{background:var(--side);border-radius:8px;padding:12px 14px;margin-bottom:8px;cursor:pointer}
+.post:hover{background:var(--hover)}
+.pt{font-weight:700;margin-bottom:2px}
+.pm{font-size:13px;color:var(--muted)}
+
+/* call view */
+.call{flex:1;display:flex;flex-direction:column;min-height:0;background:var(--call);color:#f2f3f5;position:relative}
+.cgrid{flex:1;min-height:0;display:grid;gap:8px;padding:16px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));align-content:center;overflow:auto}
+.cfocus{flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;padding:16px 16px 8px}
+.cfocus>.ctile{flex:1;aspect-ratio:auto;min-height:0}
+.cstrip{display:flex;gap:8px;overflow-x:auto;flex:none;padding-bottom:2px}
+.cstrip .ctile{width:180px;flex:none}
+.ctile{position:relative;aspect-ratio:16/9;border-radius:8px;overflow:hidden;background:var(--tile);display:grid;place-items:center;cursor:pointer;outline:2px solid transparent;outline-offset:-2px;transition:outline-color .1s}
+.ctile.speaking{outline:3px solid var(--green);outline-offset:-3px}
+.ctile video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+.ctile video.mirror{transform:scaleX(-1)}
+.ctile:fullscreen{border-radius:0}
+.ctile .av{width:80px;height:80px;font-size:32px}
+.cstrip .ctile .av{width:44px;height:44px;font-size:18px}
+.clabel{position:absolute;left:8px;bottom:8px;display:flex;gap:6px;align-items:center;background:#000a;padding:3px 8px;border-radius:6px;font-size:13px;font-weight:600;max-width:calc(100% - 16px);white-space:nowrap;overflow:hidden}
+.clabel .ico{width:16px;height:16px;color:#f23f42}
+.cwait{position:absolute;inset:auto 0 40%;text-align:center;font-size:13px;color:#b5bac1}
+.ctop{position:absolute;right:8px;top:8px;display:flex;gap:4px}
+.ctop .live{font-size:11px}
+.caud{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:0 16px 8px;color:#b5bac1;font-size:13px}
+.cempty{flex:1;display:grid;place-items:center;text-align:center;color:#b5bac1;padding:16px}
+.cempty h2{color:#f2f3f5;margin:0 0 4px}
+.cbar{display:flex;justify-content:center;align-items:center;gap:10px;padding:12px 12px 20px;flex:none;flex-wrap:wrap}
+.cgrp{display:flex;gap:4px;background:#1a1b1e;border:1px solid #2b2c31;border-radius:14px;padding:6px}
+.csplit{display:flex;border-radius:10px;overflow:hidden}
+.csplit .cbtn{border-radius:0}
+.csplit .cbtn+.cbtn{width:30px;border-left:1px solid #0006}
+.csplit.bad .cbtn{background:#3a1d20;color:#f23f42}
+.cbtn{height:46px;min-width:46px;border:0;border-radius:10px;background:transparent;color:#f2f3f5;display:grid;place-items:center;cursor:pointer;padding:0 10px}
+.cbtn:hover:not(:disabled){background:#ffffff14}
+.cbtn:disabled{opacity:.35;cursor:default}
+.cbtn.on{background:var(--green);color:#fff}
+.cbtn .ico{width:24px;height:24px}
+.csplit .cbtn+.cbtn .ico{width:16px;height:16px}
+.chang{height:58px;width:96px;border:0;border-radius:14px;background:var(--red);color:#fff;display:grid;place-items:center;cursor:pointer}
+.chang:hover{filter:brightness(1.1)}
+.chang .ico{width:28px;height:28px}
+.cjoin{background:var(--green);color:#fff;border:0;border-radius:10px;padding:12px 28px;font-weight:700;font-size:16px;cursor:pointer}
+.cjoin:hover{filter:brightness(1.1)}
+.sbfloat{position:absolute;left:50%;top:16px;transform:translateX(-50%);background:#000c;color:#fff;padding:6px 14px;border-radius:20px;font-size:14px;pointer-events:none;animation:sbin .2s}
+@keyframes sbin{from{opacity:0;transform:translate(-50%,-8px)}}
+
+#memberList{width:240px;background:var(--side);overflow:auto;padding:4px 8px 12px}
+.mrow{display:flex;gap:10px;align-items:center;padding:5px 8px;border-radius:4px;cursor:pointer;color:var(--muted)}
+.mrow:hover{background:var(--hover);color:var(--text)}
+.mrow .av{width:32px;height:32px}
+.mrow.offline{opacity:.4}
+
+.pop{position:fixed;z-index:30;background:var(--float);color:var(--text);border-radius:8px;box-shadow:0 8px 24px var(--shadow);border:1px solid var(--border);padding:6px;max-height:70vh;overflow:auto}
+.menu{min-width:200px;display:grid}
+.mi{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:none;border:0;padding:7px 10px;border-radius:4px;cursor:pointer;font-size:14px;color:var(--text)}
+.mi span{flex:1}
+.mi:hover,.mi.sel{background:var(--accent);color:#fff}
+.mi.danger{color:#f23f42} .mi.danger:hover{background:var(--red);color:#fff}
+.mi .ico{width:16px;height:16px}
+.mi .hint{font-size:12px;opacity:.7}
+.mrowc{padding:6px 10px}
+.mrowc label{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase}
+.qrx{display:flex;gap:4px;padding:2px 4px 6px}
+.qrx button{font-size:20px;background:var(--side);border:0;border-radius:50%;width:38px;height:38px;cursor:pointer}
+.qrx button:hover{background:var(--hover)}
+.msep{height:1px;background:var(--border);margin:4px 6px}
+.mi .sd{width:10px;height:10px;border-radius:50%;flex:none}
+.rd{width:16px;height:16px;border-radius:50%;border:2px solid currentColor;flex:none;opacity:.7}
+.rd.on{border-color:var(--accent);background:radial-gradient(var(--accent) 40%,transparent 46%);opacity:1}
+.mi:hover .rd.on{border-color:#fff;background:radial-gradient(#fff 40%,transparent 46%)}
+.ck{width:16px;height:16px;border-radius:4px;border:2px solid currentColor;flex:none;opacity:.7}
+.ck.on{background:var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 12l4 4 8-8' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/12px no-repeat;border-color:var(--accent);opacity:1}
+.epick{width:330px}
+.emojis{display:grid;grid-template-columns:repeat(9,1fr);gap:2px}
+.emojis button{font-size:22px;background:none;border:0;cursor:pointer;border-radius:4px;padding:2px;line-height:1.3}
+.emojis button:hover{background:var(--hover)}
+.board{width:320px}
+.board .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.board .grid button{background:var(--side);border:1px solid var(--border);border-radius:8px;padding:8px 4px;cursor:pointer;display:grid;gap:2px;justify-items:center;font-size:12px;color:var(--text)}
+.board .grid button b{font-size:22px;font-weight:400}
+.board .grid button:hover{background:var(--hover);border-color:var(--accent)}
+.plist{width:min(420px,90vw)}
+.plist h3{margin:4px 6px 8px;font-size:16px}
+.pitem{background:var(--side);border-radius:6px;padding:8px 10px;margin-bottom:6px;cursor:pointer}
+.pitem:hover{background:var(--hover)}
+.pitem .tx{font-size:14px}
+.profile{width:300px;padding:0 10px 10px}
+.pbanner{height:60px;margin:-6px -16px 0;border-radius:8px 8px 0 0}
+.pav .av{width:80px;height:80px;font-size:32px;border:6px solid var(--float);margin-top:-40px}
+.pav .sdot{width:22px;height:22px;border-width:5px;border-color:var(--float);right:2px;bottom:2px}
+.pname{font-size:20px;font-weight:700;margin:4px 0 2px}
+.profile .btn{margin-top:10px}
+.field{display:grid;gap:6px;margin:14px 0}
+.vrow{display:flex;align-items:center;gap:10px}
+.vrow input{flex:1}
+.chk{display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer}
+.meter{height:8px;background:var(--field);border-radius:4px;overflow:hidden}
+.meter.big{position:relative;height:12px;margin-top:6px;overflow:visible}
+.lvl{height:100%;width:0;background:var(--btn2);border-radius:4px;transition:width .05s}
+.lvl.open{background:var(--green)}
+.thr{position:absolute;top:-3px;bottom:-3px;width:3px;margin-left:-1px;background:var(--yellow);border-radius:2px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:0 20px}
+.keybtn{font-family:ui-monospace,Consolas,monospace}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.segb{background:var(--field);border:2px solid transparent;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:14px}
+.segb.sel{border-color:var(--accent);background:#5865f226}
+.themes{display:flex;gap:12px;flex-wrap:wrap}
+.tsw{width:64px;height:64px;border-radius:10px;border:2px solid var(--border);cursor:pointer;position:relative;display:grid;place-items:center;color:var(--text)}
+.tsw.sel{border:3px solid var(--accent)}
+.tsw.sel::after{content:"";position:absolute;right:-8px;top:-8px;width:22px;height:22px;border-radius:50%;background:var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 12l4 4 8-8' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/16px no-repeat}
+.tsw .ico{width:28px;height:28px}
+.toggle{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:6px 0}
+.toggle b{display:block;font-weight:600} .toggle span{font-size:13px;color:var(--muted)}
+.sw{appearance:none;-webkit-appearance:none;width:44px!important;height:24px;border-radius:12px;background:var(--btn2);position:relative;cursor:pointer;flex:none;transition:background .15s}
+.sw::after{content:"";position:absolute;left:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .15s}
+.sw:checked{background:var(--green)} .sw:checked::after{left:23px}
+
+#toasts{position:fixed;right:16px;bottom:16px;display:grid;gap:8px;z-index:40;max-width:340px}
+.toast{background:var(--float);color:var(--text);border:1px solid var(--border);padding:10px 14px;border-radius:6px;box-shadow:0 4px 12px var(--shadow);font-size:14px}
+dialog{background:var(--side);color:var(--text);border:0;border-radius:8px;max-width:460px;padding:20px}
+dialog::backdrop{background:#000b}
+dialog h2{margin:0 0 8px;font-size:20px}
+dialog p{font-size:14px;color:var(--muted)}
+.dlgbtns{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.dlgbtns .btn{width:auto;padding:9px 18px}
+#codes{list-style:none;padding:0;display:grid;gap:10px}
+.code{font-family:ui-monospace,Consolas,monospace;font-size:17px;letter-spacing:1px;color:var(--strong)}
+#settings{max-width:none;width:min(820px,94vw);height:min(620px,90vh);padding:0}
+#settings[open]{display:grid;grid-template-columns:210px 1fr}
+#setNav{background:var(--side);padding:16px 8px;display:flex;flex-direction:column;gap:2px;overflow:auto}
+#setNav .mi{color:var(--muted)} #setNav .mi.sel{background:var(--active);color:var(--strong)} #setNav .mi:hover:not(.sel){background:var(--hover);color:var(--text)}
+#setBody{background:var(--main);padding:24px 32px;overflow:auto}
+#setBody h2{font-size:20px;margin-bottom:16px}
+#setBody h3{font-size:16px;margin:22px 0 6px}
+#setBody .btn{width:auto;padding:8px 16px}
+
+body.compact .msg{grid-template-columns:0 minmax(0,1fr);column-gap:0;padding-left:12px}
+body.compact .msg:not(.cont){margin-top:4px}
+body.compact .gut{display:none}
+body.compact .replyline::before{display:none}
+
+@media (max-width:1000px){ #memberList{display:none} }
+@media (max-width:700px){
+  #app{grid-template-columns:1fr;grid-template-rows:auto auto 1fr}
+  #rail{flex-direction:row;padding:6px 12px}
+  .srv::before{display:none}
+  #side{max-height:200px}
+  #settings[open]{grid-template-columns:1fr} #setNav{flex-direction:row;overflow:auto}
+  .chang{width:64px}
+}
+</style>
+</head>
+<body>
+<div id="join">
+  <form>
+    <h1>LiteCord</h1>
+    <label for="name">Your name</label>
+    <input id="name" maxlength="32" required autofocus>
+    <label for="room">Server</label>
+    <input id="room" maxlength="32">
+    <button class="btn primary">Join</button>
+    <button type="button" id="installBtn" class="btn" hidden>⬇ Install as an app</button>
+  </form>
+</div>
+
+<div id="app">
+  <nav id="rail" aria-label="Servers"></nav>
+  <aside id="left">
+    <button id="roomBar" title="Server menu"><span id="roomName"></span><span data-icon="chevron"></span></button>
+    <div id="side"><div id="channels"></div></div>
+    <div id="voicePanel" hidden>
+      <div id="vpTop">
+        <span id="vpSignal" data-icon="signal" title="Voice connection"></span>
+        <div id="vpInfo"><div id="vpState">Voice Connected</div><button id="vpName" title="Open the call"></button></div>
+        <button id="nsBtn" class="ib"></button>
+        <button id="leaveBtn" class="ib" data-icon="hangup" title="Disconnect"></button>
+      </div>
+      <div id="vpBtns">
+        <button id="camBtn" class="vbtn"></button>
+        <button id="shareBtn" class="vbtn"></button>
+        <button id="sbBtn" class="vbtn" data-icon="board" title="Soundboard"></button>
+        <button id="vpMore" class="vbtn" data-icon="more" title="More"></button>
+      </div>
+      <div id="stageRow"><button id="handBtn" class="btn"></button><button id="audBtn" class="btn">⬇ Move to audience</button></div>
+    </div>
+    <div id="userBar">
+      <button id="meBtn" title="Set status"><span id="myAv"></span><div id="meInfo"><div id="myName"></div><div id="status">Connecting…</div></div></button>
+      <button id="muteBtn" class="ib"></button>
+      <button id="deafBtn" class="ib"></button>
+      <button id="setBtn" class="ib" data-icon="gear" title="User settings"></button>
+    </div>
+  </aside>
+  <main>
+    <div id="chHead">
+      <div id="chTitle"></div>
+      <div id="chTools">
+        <button id="pinsBtn" class="ib" data-icon="pin" title="Pinned messages"></button>
+        <button id="membersBtn" class="ib" data-icon="users" title="Show or hide the member list"></button>
+        <input id="search" placeholder="Search" maxlength="100" title="Search messages in this server (press Enter)">
+      </div>
+    </div>
+    <div id="view"></div>
+    <div id="uploads"></div>
+  </main>
+  <aside id="memberList"></aside>
+</div>
+
+<dialog id="e2ee">
+  <h2>🔒 End-to-end encrypted</h2>
+  <p>Voice, video and screen share go straight from your browser to your friends' browsers, encrypted. The server can't see or hear them.</p>
+  <p>To be sure nobody is in the middle, compare these codes with each person (read them out loud). If they match, the call is private.</p>
+  <ul id="codes"></ul>
+  <form method="dialog"><button class="btn primary">Close</button></form>
+</dialog>
+<dialog id="settings"><nav id="setNav"></nav><div id="setBody"></div></dialog>
+<dialog id="shareDlg"></dialog>
+<div id="toasts"></div>
+<div id="sounds" hidden></div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+// Tiny element builder: h("div", {class: "x", onclick: fn}, ...children)
+function h(tag, props = {}, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === "class") el.className = v;
+    else if (k === "style") el.style.cssText = v;
+    else if (k in el) el[k] = v;
+    else el.setAttribute(k, v);
+  }
+  el.append(...kids.filter(x => x != null && x !== false));
+  return el;
+}
+
+const ICE = {iceServers: [{urls: "stun:stun.l.google.com:19302"}, {urls: "stun:stun.cloudflare.com:3478"}]};
+const RESOLUTIONS = {
+  "360": {w: 640, h: 360, label: "360p"},
+  "480": {w: 854, h: 480, label: "480p"},
+  "720": {w: 1280, h: 720, label: "720p"},
+  "1080": {w: 1920, h: 1080, label: "1080p"},
+  "1440": {w: 2560, h: 1440, label: "1440p"},
+  "max": {w: 0, h: 0, label: "Full"},
+};
+const CAM = {w: 640, h: 360, fps: 15, br: 500e3};  // camera kept small: cheap to encode and decode
+const MAX_FILE = 25 * 1024 * 1024;
+const MAX_FILES_TOTAL = 500 * 1024 * 1024;  // files live in browser memory, so this stays modest
+const HISTORY_LIMIT = 200, POST_LIMIT = 100, MAX_CHANNELS = 50;
+const CHUNK = 16 * 1024;                     // piece size for files and big messages
+const KINDS = ["text", "voice", "stage", "forum"];
+const DEFAULT_CHANNELS = [["general", "text"], ["Lounge", "voice"], ["Stage", "stage"], ["forum", "forum"]];
+// Files of these types are shown in the chat. Everything else is a download.
+const TYPES = {png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp",
+               mp4: "video/mp4", m4v: "video/mp4", webm: "video/webm", mp3: "audio/mpeg", ogg: "audio/ogg",
+               oga: "audio/ogg", opus: "audio/ogg", wav: "audio/wav", m4a: "audio/mp4"};
+const INLINE = new Set(Object.values(TYPES));
+const ICONS = {text: "#", voice: "🔊", stage: "🎙️", forum: "💬"};
+const GROUPS = [["text", "Text channels"], ["voice", "Voice channels"], ["stage", "Stage channels"], ["forum", "Forums"]];
+
+const myId = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);  // this tab's connection
+// Stays the same across visits, so you can edit and delete your own messages later.
+const myUid = localStorage.lcUid ||= [...crypto.getRandomValues(new Uint8Array(8))].map(b => b.toString(16).padStart(2, "0")).join("");
+const prefs = Object.assign({notify: "mentions", sound: true, compact: false, fs: 15, mic: "", spk: "", cam: "",
+                             ec: true, agc: true, nsMode: "rnnoise", inVol: 1, outVol: 1, inputMode: "vad", autoSens: true,
+                             sens: -50, pttKey: "Backquote", pttDelay: 20, vol: {}, lmute: {}, theme: "dark", gap: 14, zoom: 1,
+                             reduce: false, status: "online", sounds: {}, sfxVol: .6, sbVol: .8, muted: {}, hideMuted: {},
+                             noVideo: {}, share: {res: "1080", fps: 30, hint: "motion", audio: true}},
+                            (() => { try { return JSON.parse(localStorage.lcPrefs || "{}"); } catch { return {}; } })());
+let myName = "", room = "";
+const people = new Map();   // id -> {id, name, state}
+let channels = [];          // from the host
+const hist = new Map();     // channel or post id -> messages (everyone keeps a copy, so anyone can take over hosting)
+const fileMeta = new Map(); // file id -> {id, name, size, type}
+const blobs = new Map();    // file id -> file contents we have
+const urls = new Map();     // file id -> blob: URL for showing it
+const missing = new Set();  // file ids nobody online has anymore
+let selfAuth = {};          // my voice/stage state as the host decided it
+let deleted = new Set();    // ids of deleted channels and posts, so old saved copies don't bring them back
+const unread = new Map();   // channel id -> count
+let view = null;            // {ch, kind: "text" | "forum" | "post", parent}
+const pcs = new Map();      // peer id -> peer connection info
+const remote = new Map();   // remote track id -> {el, peer, kind, streamId}
+let voiceCh = null;
+const me = {speaker: false, hand: false};
+let micStream = null, camStream = null, screenStream = null;
+let muted = false, deaf = false, lastMsg = null, titleUnread = 0;
+let micBusy = false, micFailed = false;
+const canMedia = !!navigator.mediaDevices?.getUserMedia;
+const canShare = !!navigator.mediaDevices?.getDisplayMedia;
+
+/* ---------- installing as an app (its own window, no browser tabs) ---------- */
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+let installPrompt = null;
+addEventListener("beforeinstallprompt", e => { e.preventDefault(); installPrompt = e; $("#installBtn") && ($("#installBtn").hidden = false); });
+addEventListener("appinstalled", () => { installPrompt = null; $("#installBtn")?.remove(); });
+$("#installBtn").onclick = async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  await installPrompt.userChoice.catch(() => {});
+  installPrompt = null;
+  $("#installBtn")?.remove();
+};
+
+/* ---------- joining ---------- */
+const params = new URLSearchParams(location.search);
+$("#name").value = localStorage.lcName || "";
+$("#room").value = params.get("room") || localStorage.lcLast || "lobby";
+
+$("#join form").onsubmit = e => {
+  e.preventDefault();
+  myName = oneLine($("#name").value).slice(0, 32);
+  room = $("#room").value.trim().slice(0, 32) || "lobby";
+  if (!myName) return;
+  localStorage.lcName = myName;
+  localStorage.lcLast = room;
+  rememberServer(room);
+  history.replaceState(null, "", "?room=" + encodeURIComponent(room));
+  $("#join").remove();
+  $("#app").classList.add("show");
+  $("#roomName").textContent = room;
+  $("#myName").textContent = myName;
+  $("#myAv").replaceChildren(avatar({id: myId, uid: myUid, name: myName}));
+  renderRail(); renderPanel(); renderMemberList();
+  if (!window.isSecureContext)
+    toast("⚠ This page isn't using HTTPS, so voice, video and screen share are off. Open the https:// link instead.", 20000);
+  status("Joining…");
+  navigator.storage?.persist?.().catch(() => {});
+  loadSaved().catch(err => console.warn(err)).finally(connectRelay);
+};
+
+/* ---------- finding each other: a tiny relay on Cloudflare ---------- */
+// The relay only says who's in this server and passes connection setup messages along.
+// Chat, files, voice and video go directly between browsers over WebRTC.
+// Whoever has been online the longest is the host: their browser keeps the channels and
+// history and everyone syncs from it. Everyone keeps a copy, so if the host leaves,
+// the next person takes over without losing anything.
+let ws = null, leader = null, ready = false, haveData = false, present = new Set(), freshSocket = false;
+let outbox = [];
+const enc = new TextEncoder(), dec = new TextDecoder();
+const rid = (n = 6) => [...crypto.getRandomValues(new Uint8Array(n))].map(b => b.toString(16).padStart(2, "0")).join("");
+const amHost = () => !!leader && leader === myId;
+const FID = /^[0-9a-f]{24}$/;
+
+function connectRelay() {
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  freshSocket = true;
+  const sock = ws = new WebSocket(`${proto}://${location.host}/relay?room=${encodeURIComponent(room)}&id=${myId}&name=${encodeURIComponent(myName)}`);
+  sock.binaryType = "arraybuffer";
+  sock.onmessage = e => {
+    if (typeof e.data !== "string") {
+      const u = new Uint8Array(e.data), n = u[0];
+      return onPeerBinary(dec.decode(u.subarray(1, 1 + n)), u.subarray(1 + n));
+    }
+    if (e.data === "pong") return;
+    let m;
+    try { m = JSON.parse(e.data); } catch { return; }
+    if (m.type === "peers") onRelayPeers(m);
+    else if (m.type === "msg") onPeerText(String(m.from), m.data);
+  };
+  sock.onclose = () => {
+    if (ws !== sock) return;
+    status("Reconnecting…");
+    setTimeout(connectRelay, 2000);
+  };
+}
+setInterval(() => { if (ws?.readyState === 1) ws.send("ping"); }, 20000);
+
+function onRelayPeers(m) {
+  present = new Set((m.peers || []).map(p => String(p.id)));
+  for (const id of [...links.keys()]) if (!present.has(id)) closeLink(id);
+  const old = leader;
+  leader = m.leader ? String(m.leader) : null;
+  if (leader && leader !== old) onLeaderChange();
+  // Our connection to the relay dropped and came back with the same host: say hello again,
+  // because the host saw us leave. (This also happens to everyone when a new version is uploaded.)
+  else if (freshSocket && leader && !amHost()) helloHost();
+  freshSocket = false;
+  if (ready) status(amHost() ? "Connected · hosting" : "Connected");
+  if (amHost()) {
+    for (const id of [...people.keys()]) if (!present.has(id)) emit({type: "leave", id}, id);
+    for (const k of [...upIn.keys()]) if (!present.has(k.split(":")[0])) upIn.delete(k);
+  }
+}
+
+function onLeaderChange() {
+  for (const u of upOut.values()) { u.line.remove(); toast(`Upload stopped: ${u.file.name}. Please try again.`); }
+  upOut.clear();
+  if (fetching) { wanted.unshift(fetching.fid); fetching = null; }
+  renderSidebar();
+  if (amHost()) return becomeHost();
+  ready = false;
+  status(haveData ? "Switching host…" : "Joining…");
+  for (const id of [...links.keys()]) if (id !== leader) closeLink(id);
+  helloHost();
+}
+function helloHost() {
+  const l = links.get(leader);
+  if (!l || ["failed", "closed"].includes(l.pc.connectionState)) { closeLink(leader); openLink(leader); }
+  toPeer(leader, {type: "hello", name: myName, uid: myUid, status: myStatus(), files: [...blobs.keys()], saved: haveData ? snapshot() : null});
+}
+
+function becomeHost() {
+  if (!haveData) {  // first one here: set up a fresh server
+    // Fixed ids, so two people who each start the same server end up with one "general" when their copies merge.
+    channels = DEFAULT_CHANNELS.map(([name, kind]) => ({...newChannel(name, kind), id: "default-" + name.toLowerCase()}));
+    hist.clear(); people.clear();
+    selfAuth = {};
+    haveData = true;
+    afterSync();
+  }
+  // Files nobody online has: mark them, and pick them up if someone who has them comes back.
+  for (const fid of wanted) if (!present.has(fileSources.get(fid))) { missing.add(fid); fileChanged(fid); }
+  ready = true;
+  nextFetch();
+  status("Connected · hosting");
+  sendState();
+  flushOutbox();
+  renderSidebar();
+}
+
+function afterSync() {
+  if (voiceCh && !chById(voiceCh)) leaveVoice();
+  syncMedia(); renderPanel();
+  openView(view && viewExists(view) ? view : defaultView());
+}
+
+// Send something to the host (or handle it here if we are the host).
+function send(msg) {
+  if (!ready) { if (outbox.length < 500) outbox.push(msg); return; }
+  if (amHost()) hostHandle(myId, msg);
+  else toPeer(leader, msg);
+}
+function flushOutbox() { const q = outbox; outbox = []; q.forEach(send); }
+
+/* ---------- direct links: WebRTC data channels between each browser and the host ---------- */
+const links = new Map();  // peer id -> {pc, dc, chain}
+
+function newLink(id) {
+  const pc = new RTCPeerConnection(ICE);
+  const l = {id, pc, dc: null, chain: Promise.resolve()};
+  links.set(id, l);
+  pc.onicecandidate = e => { if (e.candidate) relaySend(id, {type: "dsig", candidate: e.candidate}); };
+  pc.ondatachannel = e => setupChannel(l, e.channel);
+  return l;
+}
+function openLink(id) {  // we call the host; the host answers
+  const l = newLink(id);
+  setupChannel(l, l.pc.createDataChannel("litecord", {ordered: true}));
+  l.chain = l.chain.then(async () => {
+    await l.pc.setLocalDescription();
+    relaySend(id, {type: "dsig", description: l.pc.localDescription});
+  }).catch(err => console.warn(err));
+}
+function setupChannel(l, dc) {
+  dc.binaryType = "arraybuffer";
+  dc.onmessage = e => {
+    if (typeof e.data !== "string") return onPeerBinary(l.id, e.data);
+    let m;
+    try { m = JSON.parse(e.data); } catch { return; }
+    onPeerText(l.id, m);
+  };
+  dc.onclose = () => { if (l.dc === dc) l.dc = null; };
+  l.dc = dc;
+}
+function onDataSignal(from, {description, candidate}) {
+  let l = links.get(from);
+  if (description?.type === "offer") {
+    if (!amHost()) return;
+    closeLink(from);
+    l = newLink(from);
+  }
+  if (!l) return;
+  l.chain = l.chain.then(async () => {
+    if (description) {
+      await l.pc.setRemoteDescription(description);
+      if (description.type === "offer") {
+        await l.pc.setLocalDescription();
+        relaySend(from, {type: "dsig", description: l.pc.localDescription});
+      }
+    } else if (candidate) await l.pc.addIceCandidate(candidate).catch(() => {});
+  }).catch(err => console.warn(err));
+}
+function closeLink(id) {
+  const l = links.get(id);
+  if (!l) return;
+  l.pc.close();
+  links.delete(id);
+}
+
+// The direct link if it's open, otherwise through the relay (for strict networks).
+function pathTo(id) {
+  const dc = links.get(id)?.dc;
+  if (dc?.readyState === "open") return d => { try { dc.send(d); } catch (err) { console.warn(err); } };
+  return d => relayRaw(id, d);
+}
+function relayRaw(to, d) {
+  if (ws?.readyState !== 1) return;
+  if (typeof d === "string") return ws.send(`{"to":${JSON.stringify(to)},"data":${d}}`);
+  const t = enc.encode(to), out = new Uint8Array(1 + t.length + d.length);
+  out[0] = t.length; out.set(t, 1); out.set(d, 1 + t.length);
+  ws.send(out);
+}
+const relaySend = (to, obj) => relayRaw(to, JSON.stringify(obj));
+const toPeer = (id, obj) => sendText(id, JSON.stringify(obj));
+function sendText(id, s) {
+  const out = pathTo(id);
+  if (s.length <= 16000) return out(s);
+  const bytes = enc.encode(s), mid = rid(), n = Math.ceil(bytes.length / CHUNK);  // big messages go in pieces
+  for (let i = 0; i < n; i++) out(frame({t: "big", mid, i, n}, bytes.subarray(i * CHUNK, (i + 1) * CHUNK)));
+}
+// Binary piece: [2-byte header length][JSON header][bytes]
+function frame(header, body) {
+  const hd = enc.encode(JSON.stringify(header)), out = new Uint8Array(2 + hd.length + body.length);
+  out[0] = hd.length >> 8; out[1] = hd.length & 255;
+  out.set(hd, 2); out.set(body, 2 + hd.length);
+  return out;
+}
+// Wait while lots of data is still queued, so big files don't pile up in memory.
+async function drain(id) {
+  for (;;) {
+    const dc = links.get(id)?.dc;
+    const queued = dc?.readyState === "open" ? dc.bufferedAmount : ws?.bufferedAmount || 0;
+    if (queued < 1 << 20) return;
+    await new Promise(r => setTimeout(r, 30));
+  }
+}
+
+const bigIn = new Map();
+function onPeerBinary(from, data) {
+  const u = data instanceof Uint8Array ? data : new Uint8Array(data);
+  if (u.length < 2) return;
+  const n = (u[0] << 8) | u[1];
+  let hd;
+  try { hd = JSON.parse(dec.decode(u.subarray(2, 2 + n))); } catch { return; }
+  const body = u.subarray(2 + n);
+  if (hd?.t === "big") {
+    const key = from + ":" + hd.mid, total = hd.n, i = hd.i;
+    if (!Number.isInteger(total) || !Number.isInteger(i) || total < 1 || total > 2048 || i < 0 || i >= total) return;
+    let b = bigIn.get(key);
+    if (!b) bigIn.set(key, b = {parts: new Array(total), got: 0});
+    if (b.parts.length !== total || b.parts[i]) return;
+    b.parts[i] = body;
+    if (++b.got < total) return;
+    bigIn.delete(key);
+    const all = new Uint8Array(b.parts.reduce((s, p) => s + p.length, 0));
+    let o = 0;
+    for (const p of b.parts) { all.set(p, o); o += p.length; }
+    let m;
+    try { m = JSON.parse(dec.decode(all)); } catch { return; }
+    onPeerText(from, m);
+  } else if (hd?.t === "up") { if (amHost()) hostChunk(from, hd, body); }
+  else if (hd?.t === "file") { if (fetching && from === fetching.from) fileChunk(hd, body); }
+}
+
+function onPeerText(from, m) {
+  if (!m || typeof m !== "object") return;
+  if (m.type === "signal") { if (sameCall(from)) onSignal(from, m.data || {}); return; }
+  if (m.type === "dsig") return onDataSignal(from, m);
+  if (amHost()) return hostHandle(from, m);
+  if (from === leader) onServer(m);
+}
+
+/* ---------- host: the browser that keeps this server's channels and history ---------- */
+const upIn = new Map();
+const sbLast = new Map();  // soundboard: one sound per person every 1.5 seconds  // "peer:upload id" -> file someone is uploading to us
+
+// Apply an event here and send it to everyone.
+function emit(ev, exclude) {
+  const s = JSON.stringify(ev);
+  for (const id of people.keys()) if (id !== exclude) sendText(id, s);
+  onServer(JSON.parse(s));
+}
+function hostHandle(from, m) {
+  if (!m || typeof m !== "object") return;
+  if (m.type === "hello") return hostHello(from, m);
+  const who = from === myId ? {id: myId, uid: myUid, name: myName} : people.get(from);
+  if (!who) return;
+  switch (m.type) {
+    case "chat": return hostChat(from, who, m);
+    case "post": return hostPost(from, who, m);
+    case "channel": return hostChannel(m);
+    case "edit": case "del": case "react": case "pin": return hostMsgAction(who, m);
+    case "typing": {
+      const ch = String(m.ch ?? ""), k = chanKind(ch);
+      if (k === "text" || k === "post") emit({type: "typing", ch, id: from, name: who.name});
+      return;
+    }
+    case "status":
+      emit({type: "status", id: from, status: STATUS[m.status] ? m.status : "online"});
+      return;
+    case "sb": {
+      const v = authOf(from).voice, i = Math.floor(+m.sound), now = Date.now();
+      if (!v || !(i >= 0 && i < BOARD.length) || now - (sbLast.get(from) || 0) < 1500) return;
+      sbLast.set(from, now);
+      emit({type: "sb", id: from, name: who.name, ch: v, sound: i});
+      return;
+    }
+    case "rename": {
+      const name = oneLine(m.name).slice(0, 32);
+      if (name) emit({type: "rename", id: from, name});
+      return;
+    }
+    case "state": return hostState(from, m.state);
+    case "stage": return hostStage(from, m);
+    case "upload": return hostUpload(from, m);
+    case "getfile": return serveFile(from, String(m.fid));
+    case "nofile":
+      if (fetching?.fid === m.fid && fetching.from === from) { fileSources.delete(m.fid); missing.add(m.fid); fetching = null; fileChanged(m.fid); nextFetch(); }
+      return;
+  }
+}
+function hostHello(from, m) {
+  if (from === myId) return;
+  const name = oneLine(m.name).slice(0, 32) || "Someone", uid = String(m.uid ?? "").slice(0, 32) || from;
+  const status = STATUS[m.status] ? m.status : "online";
+  if (!people.has(from)) emit({type: "join", peer: {id: from, uid, name, status, state: {}}});
+  else { people.get(from).uid ||= uid; emit({type: "status", id: from, status}); }
+  // Like a torrent: note which files they have, and add anything from their saved copy that we're missing.
+  for (const fid of Array.isArray(m.files) ? m.files.slice(0, 5000) : []) {
+    if (!FID.test(fid)) continue;
+    fileSources.set(fid, from);
+    if (missing.delete(fid)) { wanted.push(fid); fileChanged(fid); }
+  }
+  if (mergeSaved(m.saved)) emit({type: "sync", ...snapshot()}, from);
+  const peers = [{id: myId, uid: myUid, name: myName, status: myStatus(), state: selfAuth}, ...[...people.values()].filter(p => p.id !== from)];
+  toPeer(from, {type: "welcome", peers, you: authOf(from), ...snapshot()});
+  nextFetch();
+}
+const snapshot = () => ({channels, history: Object.fromEntries(hist), deleted: [...deleted].slice(-5000)});
+
+// Merge someone's saved copy into ours: new channels, posts and messages are added, deleted ones stay deleted.
+function mergeSaved(saved) {
+  if (!saved || typeof saved !== "object" || !Array.isArray(saved.channels)) return false;
+  let changed = false;
+  for (const id of Array.isArray(saved.deleted) ? saved.deleted.slice(-2000) : [])
+    if (typeof id === "string" && !deleted.has(id)) { deleted.add(id); changed = true; }
+  if (changed) dropDeleted();
+  for (const c of saved.channels) {
+    if (!c || typeof c.id !== "string" || deleted.has(c.id) || !KINDS.includes(c.kind)) continue;
+    let mine = chById(c.id);
+    if (!mine) {
+      if (channels.length >= MAX_CHANNELS) continue;
+      mine = newChannel(oneLine(c.name).slice(0, 32) || "channel", c.kind);
+      mine.id = c.id.slice(0, 32);
+      channels.push(mine);
+      changed = true;
+    }
+    if (mine.kind !== "forum" || !Array.isArray(c.posts)) continue;
+    for (const p of c.posts.slice(0, POST_LIMIT)) {
+      if (!p || typeof p.id !== "string" || deleted.has(p.id)) continue;
+      const have = mine.posts.find(x => x.id === p.id);
+      if (!have) {
+        mine.posts.push({id: p.id.slice(0, 32), title: oneLine(p.title).slice(0, 100) || "post", author: String(p.author ?? "").slice(0, 32),
+                         uid: String(p.uid ?? "").slice(0, 64), ts: +p.ts || 0, last: +p.last || 0, count: Math.max(0, +p.count || 0)});
+        changed = true;
+      } else if (+p.last > have.last) {
+        have.last = +p.last; have.count = Math.max(have.count, +p.count || 0);
+        changed = true;
+      }
+    }
+    mine.posts.sort((a, b) => b.ts - a.ts);
+    for (const old of mine.posts.splice(POST_LIMIT)) { hist.delete(old.id); deleted.add(old.id); }
+  }
+  for (const [ch, list] of Object.entries(saved.history || {})) {
+    const k = chanKind(ch);
+    if ((k !== "text" && k !== "post") || !Array.isArray(list)) continue;
+    const mine = hist.get(ch) || [], seen = new Set(mine.map(x => x.mid));
+    let added = false;
+    for (const x of list.slice(-HISTORY_LIMIT)) {
+      if (!x || typeof x.mid !== "string" || deleted.has(x.mid)) continue;
+      if (seen.has(x.mid)) {  // we have it: take their edit if it's newer
+        const have = mine.find(y => y.mid === x.mid);
+        if (+x.edited > (have.edited || 0) && typeof x.text === "string" && x.text.trim()) {
+          have.text = x.text.slice(0, 2000); have.edited = +x.edited; added = true;
+        }
+        continue;
+      }
+      const msg = {type: "chat", ch, mid: x.mid.slice(0, 32), id: String(x.id ?? "").slice(0, 64), name: String(x.name ?? "").slice(0, 32) || "Someone",
+                   text: String(x.text ?? "").slice(0, 2000), ts: +x.ts || 0};
+      if (typeof x.uid === "string") msg.uid = x.uid.slice(0, 32);
+      if (+x.edited) msg.edited = +x.edited;
+      if (x.pinned) msg.pinned = true;
+      if (x.reply && typeof x.reply.mid === "string")
+        msg.reply = {mid: x.reply.mid.slice(0, 32), name: String(x.reply.name ?? "").slice(0, 32), text: String(x.reply.text ?? "").slice(0, 120)};
+      if (x.reactions && typeof x.reactions === "object") {
+        const r = {};
+        for (const [em, uids] of Object.entries(x.reactions).slice(0, 20))
+          if (em.length <= 16 && Array.isArray(uids)) r[em] = uids.filter(u => typeof u === "string").slice(0, 100);
+        if (Object.keys(r).length) msg.reactions = r;
+      }
+      const f = x.file && registerFile(x.file);
+      if (f) msg.file = f;
+      if (!msg.text && !msg.file) continue;
+      mine.push(msg); seen.add(msg.mid); added = true;
+    }
+    if (!added) continue;
+    mine.sort((a, b) => a.ts - b.ts || (a.mid < b.mid ? -1 : 1));
+    mine.splice(0, mine.length - HISTORY_LIMIT);
+    hist.set(ch, mine);
+    changed = true;
+  }
+  return changed;
+}
+function dropDeleted() {
+  channels = channels.filter(c => !deleted.has(c.id));
+  for (const c of channels) if (c.posts) c.posts = c.posts.filter(p => !deleted.has(p.id));
+  for (const id of [...hist.keys()]) if (deleted.has(id)) hist.delete(id);
+  for (const [ch, list] of hist) { const kept = list.filter(x => !deleted.has(x.mid)); if (kept.length !== list.length) hist.set(ch, kept); }
+  if (!channels.some(c => c.kind === "text")) channels.unshift(newChannel("general", "text"));  // always keep one text channel
+}
+function chanKind(id) { const c = chById(id); return c ? c.kind : findPost(id) ? "post" : null; }
+function authOf(id) { return id === myId ? selfAuth : people.get(id)?.state || {}; }
+const oneLine = s => String(s ?? "").split(/\s+/).filter(Boolean).join(" ");
+function newChannel(name, kind) { const c = {id: rid(), name, kind}; if (kind === "forum") c.posts = []; return c; }
+
+function hostChat(from, who, m) {
+  const ch = String(m.ch ?? ""), k = chanKind(ch);
+  if (k !== "text" && k !== "post") return;
+  const text = String(m.text ?? "").trim().slice(0, 2000);
+  const f = m.file ? fileMeta.get(String(m.file)) : null;
+  if (!text && !f) return;
+  const msg = {type: "chat", ch, mid: rid(), id: from, uid: who.uid, name: who.name, text, ts: Date.now()};
+  if (f) msg.file = f;
+  const r = m.reply ? findMsg(ch, String(m.reply)) : null;
+  if (r) msg.reply = {mid: r.mid, name: r.name, text: (r.text || (r.file ? "📎 " + r.file.name : "")).slice(0, 120)};
+  emit(msg);
+}
+// Edit, delete, react, pin. Only the author can edit or delete their message.
+function hostMsgAction(who, m) {
+  const ch = String(m.ch ?? ""), mid = String(m.mid ?? ""), t = findMsg(ch, mid);
+  if (!t) return;
+  const own = !!who.uid && t.uid === who.uid;
+  if (m.type === "edit") {
+    const text = String(m.text ?? "").trim().slice(0, 2000);
+    if (own && text && text !== t.text) emit({type: "edit", ch, mid, text, edited: Date.now()});
+  } else if (m.type === "del") {
+    if (own) emit({type: "del", ch, mid});
+  } else if (m.type === "react") {
+    const emoji = String(m.emoji ?? "");
+    if (!emoji || emoji.length > 16 || /\s/.test(emoji)) return;
+    const arr = t.reactions?.[emoji] || [], on = !arr.includes(who.uid);
+    if (on && !arr.length && Object.keys(t.reactions || {}).length >= 20) return;
+    emit({type: "react", ch, mid, emoji, uid: who.uid, on});
+  } else if (m.type === "pin") emit({type: "pin", ch, mid, on: !t.pinned});
+}
+function hostPost(from, who, m) {
+  const name = who.name;
+  const forum = chById(String(m.ch ?? ""));
+  const title = oneLine(m.title).slice(0, 100);
+  if (forum?.kind !== "forum" || !title) return;
+  const now = Date.now();
+  const post = {id: rid(), title, author: name, uid: who.uid, by: from, ts: now, last: now, count: 0};
+  const text = String(m.text ?? "").trim().slice(0, 2000);
+  emit({type: "post", ch: forum.id, post, first: text ? {type: "chat", ch: post.id, mid: rid(), id: from, uid: who.uid, name, text, ts: now} : null});
+}
+function hostChannel(m) {
+  let list;
+  if (m.action === "create") {
+    const kind = String(m.kind);
+    let name = oneLine(m.name).slice(0, 32);
+    if (kind === "text" || kind === "forum") name = name.toLowerCase().replaceAll(" ", "-");
+    if (!KINDS.includes(kind) || !name || channels.length >= MAX_CHANNELS) return;
+    list = [...channels, newChannel(name, kind)];
+  } else if (m.action === "rename") {
+    const c = chById(String(m.ch ?? ""));
+    let name = oneLine(m.name).slice(0, 32);
+    if (c && (c.kind === "text" || c.kind === "forum")) name = name.toLowerCase().replaceAll(" ", "-");
+    if (!c || !name || name === c.name) return;
+    list = channels.map(x => x === c ? {...x, name} : x);
+  } else if (m.action === "delete") {
+    const c = chById(String(m.ch ?? ""));
+    if (!c || (c.kind === "text" && channels.filter(x => x.kind === "text").length <= 1)) return;  // keep one text channel
+    list = channels.filter(x => x !== c);
+  } else return;
+  emit({type: "channels", channels: list});
+}
+function hostState(id, st) {
+  if (!st || typeof st !== "object") return;
+  const prev = authOf(id), k = chanKind(st.voice);
+  const voice = k === "voice" || k === "stage" ? st.voice : null;
+  const sid = key => st[key] && voice ? String(st[key]).slice(0, 64) : null;
+  const nw = {voice, muted: !!st.muted, deaf: !!st.deaf, cam: sid("cam"), screen: sid("screen"), hand: false, speaker: false};
+  if (k === "stage") {
+    const all = [[myId, selfAuth], ...[...people.values()].map(p => [p.id, p.state || {}])];
+    const othersSpeaking = all.some(([oid, os]) => oid !== id && os.voice === voice && os.speaker);
+    nw.speaker = prev.voice === voice ? !!prev.speaker : !othersSpeaking;  // first one on an empty stage hosts it
+    const hand = !!st.hand;
+    if (hand && !nw.speaker && !othersSpeaking) nw.speaker = true;   // nobody on stage: raising your hand gets you up
+    nw.hand = hand && !nw.speaker;
+    if (!nw.speaker) nw.cam = nw.screen = null;
+  }
+  emit({type: "state", id, state: nw});
+}
+function hostStage(from, m) {
+  const tid = String(m.target ?? "");
+  if (tid !== myId && !people.has(tid)) return;
+  const t = authOf(tid), mine = authOf(from), v = mine.voice;
+  if (!v || t.voice !== v || chanKind(v) !== "stage") return;
+  let st;
+  if (m.action === "invite" && mine.speaker) st = {...t, speaker: true, hand: false};
+  else if (m.action === "audience" && (mine.speaker || tid === from)) st = {...t, speaker: false, cam: null, screen: null};
+  else return;
+  emit({type: "state", id: tid, state: st});
+}
+
+function filesUsed() {
+  let n = 0;
+  for (const b of blobs.values()) n += b.size;
+  for (const u of upIn.values()) n += u.size;
+  return n;
+}
+function hostAddFile(name, blob) {
+  const fid = rid(12);
+  fileMeta.set(fid, {id: fid, name: safeName(name), size: blob.size, type: guessType(name)});
+  blobs.set(fid, blob);
+  saveFile(fid);
+  return fid;
+}
+function hostUpload(from, m) {
+  const up = String(m.up ?? "").slice(0, 32), size = Math.floor(+m.size);
+  const fail = reason => toPeer(from, {type: "upload-failed", up, reason});
+  if (!(size > 0) || size > MAX_FILE) return fail("the file is over 25 MB");
+  if (filesUsed() + size > MAX_FILES_TOTAL) return fail("there's no room left for files in this server");
+  upIn.set(from + ":" + up, {up, name: safeName(m.name), size, ch: String(m.ch ?? ""), parts: new Map(), got: 0});
+}
+function hostChunk(from, hd, body) {
+  const key = from + ":" + hd.up, u = upIn.get(key), off = hd.off;
+  if (!u) return;
+  if (!Number.isInteger(off) || off < 0 || off % CHUNK || off >= u.size || u.parts.has(off) || body.length !== Math.min(CHUNK, u.size - off)) {
+    upIn.delete(key);
+    return toPeer(from, {type: "upload-failed", up: u.up, reason: "the upload got mixed up"});
+  }
+  u.parts.set(off, body);
+  u.got += body.length;
+  if (u.got < u.size) return;
+  upIn.delete(key);
+  const fid = hostAddFile(u.name, new Blob([...u.parts].sort((a, b) => a[0] - b[0]).map(e => e[1])));
+  toPeer(from, {type: "uploaded", up: u.up, fid});
+  hostChat(from, people.get(from) || {name: "Someone"}, {ch: u.ch, text: "", file: fid});
+}
+async function serveFile(to, fid) {
+  const b = blobs.get(fid);
+  if (!b) return toPeer(to, {type: "nofile", fid});
+  for (let off = 0; off < b.size; off += CHUNK) {
+    if (amHost() ? !people.has(to) : to !== leader) return;
+    await drain(to);
+    pathTo(to)(frame({t: "file", fid, off}, new Uint8Array(await b.slice(off, off + CHUNK).arrayBuffer())));
+  }
+}
+
+/* ---------- events from the host ---------- */
+function onServer(m) {
+  if (["welcome", "sync", "channels", "chat", "post", "edit", "del", "react", "pin"].includes(m.type)) scheduleSave();
+  switch (m.type) {
+    case "welcome": return onWelcome(m);
+    case "sync": return onSync(m);
+    case "getfile": if (FID.test(m.fid)) serveFile(leader, m.fid); break;
+    case "channels": return onChannels(Array.isArray(m.channels) ? m.channels : channels);
+    case "join":
+      if (m.peer?.id && m.peer.id !== myId) { people.set(String(m.peer.id), cleanPeer(m.peer)); renderSidebar(); }
+      break;
+    case "leave":
+      if (voiceCh && people.get(m.id)?.state?.voice === voiceCh) sfx("userLeave");
+      people.delete(m.id); closePeer(m.id); renderSidebar();
+      break;
+    case "status": {
+      const p = people.get(String(m.id));
+      if (p) { p.status = STATUS[m.status] ? m.status : "online"; renderSidebar(); }
+      break;
+    }
+    case "sb": onBoard(m); break;
+    case "state": onState(String(m.id), m.state && typeof m.state === "object" ? m.state : {}); break;
+    case "chat": onChat(m); break;
+    case "post": onPost(m); break;
+    case "edit": case "del": case "react": case "pin": onMsgEvent(m); break;
+    case "typing":
+      if (m.id !== myId) { typingNow.set(String(m.id), {ch: String(m.ch), name: String(m.name ?? "").slice(0, 32), until: Date.now() + 5000}); renderTyping(); }
+      break;
+    case "rename": {
+      const p = people.get(String(m.id));
+      if (p) { p.name = String(m.name ?? "").slice(0, 32) || p.name; renderSidebar(); relabelTiles(); }
+      break;
+    }
+    case "uploaded": {
+      const u = upOut.get(m.up);
+      if (!u || !FID.test(m.fid)) break;
+      upOut.delete(m.up); u.line.remove();
+      blobs.set(m.fid, u.file);
+      fileChanged(m.fid);
+      break;
+    }
+    case "upload-failed": {
+      const u = upOut.get(m.up);
+      if (!u) break;
+      upOut.delete(m.up); u.line.remove();
+      toast(`Upload failed: ${String(m.reason || "something went wrong")}.`);
+      break;
+    }
+    case "nofile":
+      if (!FID.test(m.fid)) break;
+      missing.add(m.fid);
+      if (fetching?.fid === m.fid) fetching = null;
+      fileChanged(m.fid); nextFetch();
+      break;
+  }
+}
+function cleanPeer(p) {
+  return {id: String(p.id), uid: typeof p.uid === "string" ? p.uid.slice(0, 32) : undefined, status: STATUS[p.status] ? p.status : "online", name: String(p.name ?? "").slice(0, 32) || "Someone", state: p.state && typeof p.state === "object" ? p.state : {}};
+}
+function onWelcome(m) {
+  people.clear();
+  for (const p of m.peers || []) if (p?.id && p.id !== myId) people.set(String(p.id), cleanPeer(p));
+  applySnapshot(m);
+  selfAuth = m.you && typeof m.you === "object" ? m.you : {};
+  me.speaker = !!selfAuth.speaker; me.hand = !!selfAuth.hand;
+  haveData = ready = true;
+  status("Connected");
+  sendState(); afterSync(); flushOutbox(); nextFetch(); renderSidebar();
+}
+function applySnapshot(m) {
+  channels = Array.isArray(m.channels) ? m.channels : [];
+  deleted = new Set(Array.isArray(m.deleted) ? m.deleted : []);
+  hist.clear();
+  for (const [ch, list] of Object.entries(m.history || {})) {
+    if (!Array.isArray(list)) continue;
+    list.forEach(fixFile);
+    hist.set(ch, list);
+  }
+}
+function onSync(m) {  // the host merged in someone's saved copy
+  applySnapshot(m);
+  if (voiceCh && !chById(voiceCh)) leaveVoice();
+  if (!view || !viewExists(view)) openView(defaultView());
+  else { renderSidebar(); if (view.kind !== "post" && view.kind !== "text" || !$("#text")?.value) renderView(); }
+  renderPanel();
+}
+function onChannels(list) {
+  const keep = new Set();
+  for (const c of list) { keep.add(c.id); for (const p of c.posts || []) keep.add(p.id); }
+  for (const c of channels) for (const id of [c.id, ...(c.posts || []).map(p => p.id)]) if (!keep.has(id)) deleted.add(id);
+  for (const id of [...hist.keys()]) if (!keep.has(id)) hist.delete(id);
+  channels = list;
+  if (voiceCh && !chById(voiceCh)) leaveVoice();
+  if (!view || !viewExists(view)) openView(defaultView());
+  else {
+    renderSidebar();
+    if (view.kind === "forum") renderView();
+    else if (view.kind === "text") {  // the channel may have been renamed
+      const c = chById(view.ch), cn = $("#chTitle .cn"), input = $("#text");
+      if (cn) cn.textContent = c.name;
+      if (input) input.placeholder = `Message #${c.name}`;
+    }
+  }
+  renderPanel();
+}
+
+/* ---------- channels and messages ---------- */
+const chById = id => channels.find(c => c.id === id);
+function findPost(id) {
+  for (const forum of channels) {
+    const post = forum.kind === "forum" && forum.posts.find(p => p.id === id);
+    if (post) return {post, forum};
+  }
+  return null;
+}
+const viewExists = v => v.kind === "post" ? !!findPost(v.ch) : !!chById(v.ch);
+function defaultView() {
+  const c = channels.find(c => c.kind === "text") || channels.find(c => c.kind === "forum");
+  return c ? {ch: c.id, kind: c.kind} : null;
+}
+const isChatView = () => view && (view.kind === "text" || view.kind === "post");
+const findMsg = (ch, mid) => (hist.get(ch) || []).find(x => x.mid === mid);
+const escRe = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function chanLabel(ch) {
+  const c = chById(ch);
+  if (c) return "#" + c.name;
+  return findPost(ch)?.post.title || "";
+}
+function openChat(ch) {  // open a text channel or forum post by id
+  if (chById(ch)) return openView({ch, kind: "text"});
+  const ref = findPost(ch);
+  if (ref) openView({ch, kind: "post", parent: ref.forum.id});
+}
+
+let replyTo = null;           // {ch, mid, name}: the message we're replying to
+let editing = null, editDraft = null;
+const mentionCount = new Map();  // channel id -> unread @mentions
+const typingNow = new Map();     // session id -> {ch, name, until}
+
+function mentionsMe(m) {
+  if (!m.text || m.uid === myUid) return false;
+  if (m.reply && findMsg(m.ch, m.reply.mid)?.uid === myUid) return true;  // replies count, like Discord
+  return new RegExp(`@(${escRe(myName)}|everyone|here)(?![\\p{L}\\p{N}_])`, "iu").test(m.text);
+}
+
+function onChat(m) {
+  fixFile(m);
+  typingNow.delete(m.id);
+  const ref = findPost(m.ch);
+  if (ref) { ref.post.count++; ref.post.last = m.ts; }
+  const list = hist.get(m.ch) || [];
+  list.push(m);
+  list.splice(0, list.length - HISTORY_LIMIT);
+  hist.set(m.ch, list);
+  const mine = m.uid === myUid, ping = mentionsMe(m);
+  if (view?.ch === m.ch) addChat(m);
+  else {
+    if (ref && view?.ch === ref.forum.id) renderView();
+    if (!mine) bump(ref ? ref.forum.id : m.ch, ping);
+  }
+  if (!mine) notify(m, ping);
+  if (document.hidden && !mine) document.title = `(${++titleUnread}) LiteCord`;
+  renderTyping();
+}
+function onPost(m) {
+  const forum = chById(m.ch);
+  if (forum?.kind !== "forum" || !m.post) return;
+  forum.posts.unshift(m.post);
+  for (const old of forum.posts.splice(POST_LIMIT)) { hist.delete(old.id); deleted.add(old.id); }
+  if (m.first) fixFile(m.first);
+  hist.set(m.post.id, m.first ? [m.first] : []);
+  if (m.post.by === myId && view?.ch === forum.id) return openView({ch: m.post.id, kind: "post", parent: forum.id});
+  if (view?.ch === forum.id) renderView();
+  else if (m.post.uid !== myUid) bump(forum.id, false);
+}
+// Edits, deletes, reactions and pins on a message.
+function onMsgEvent(m) {
+  const list = hist.get(m.ch), i = list ? list.findIndex(x => x.mid === m.mid) : -1;
+  if (i < 0) return;
+  const t = list[i];
+  if (m.type === "edit") { t.text = String(m.text ?? ""); t.edited = +m.edited || Date.now(); }
+  else if (m.type === "del") {
+    list.splice(i, 1);
+    deleted.add(m.mid);
+    if (replyTo?.mid === m.mid) { replyTo = null; renderReplyBar(); }
+    if (editing === m.mid) editing = editDraft = null;
+  } else if (m.type === "react") {
+    const r = t.reactions ||= {}, arr = r[m.emoji] ||= [];
+    const k = arr.indexOf(m.uid);
+    if (m.on && k < 0) arr.push(m.uid);
+    else if (!m.on && k >= 0) arr.splice(k, 1);
+    if (!arr.length) delete r[m.emoji];
+  } else if (m.type === "pin") t.pinned = !!m.on;
+  if (view?.ch === m.ch) refreshMessages();
+}
+function bump(id, ping) {
+  if (isMuted(id) && !ping) return;
+  unread.set(id, (unread.get(id) || 0) + 1);
+  if (ping) mentionCount.set(id, (mentionCount.get(id) || 0) + 1);
+  renderSidebar();
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { titleUnread = 0; document.title = "LiteCord"; } });
+
+// Desktop notifications and a short sound, depending on the user's settings.
+function notify(m, ping) {
+  const seen = !document.hidden && view?.ch === m.ch, chId = findPost(m.ch)?.forum.id || m.ch;
+  if (seen || (isMuted(chId) && !ping)) return;
+  if (prefs.notify === "all" || ping) sfx("message");
+  if (prefs.notify === "off" || (prefs.notify === "mentions" && !ping) || myStatus() === "dnd") return;
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  try {
+    const n = new Notification(`${m.name} (${chanLabel(m.ch)})`, {body: m.text || (m.file ? "Sent a file: " + m.file.name : ""), icon: "/icon-192.png", tag: m.ch});
+    n.onclick = () => { focus(); openChat(m.ch); n.close(); };
+  } catch {}
+}
+
+function openView(v) {
+  view = v;
+  if (v) { const id = v.kind === "post" ? v.parent : v.ch; unread.delete(id); mentionCount.delete(id); }
+  if (replyTo && replyTo.ch !== v?.ch) replyTo = null;
+  editing = editDraft = null;
+  renderSidebar();
+  renderView();
+}
+
+function renderView() {
+  const title = $("#chTitle"), box = $("#view");
+  closePop(); closeAc();
+  $("#pinsBtn").hidden = !isChatView();
+  if (!view) {
+    title.replaceChildren();
+    box.replaceChildren(h("div", {class: "empty"}, "No channels yet. Make one with +"));
+    return;
+  }
+  if (view.kind === "call") return renderCall();
+  if (view.kind === "forum") return renderForum(chById(view.ch));
+  let placeholder;
+  if (view.kind === "post") {
+    const ref = findPost(view.ch);
+    title.replaceChildren(h("button", {title: "Back to the forum", onclick: () => openView({ch: ref.forum.id, kind: "forum"})},
+                            icon("back"), ref.forum.name), h("span", {class: "dim"}, "›"), h("span", {class: "cn"}, ref.post.title));
+    placeholder = "Reply to this post";
+  } else {
+    const c = chById(view.ch);
+    title.replaceChildren(icon("hash"), h("span", {class: "cn"}, c.name));
+    placeholder = `Message #${c.name}`;
+  }
+  const msgs = h("div", {id: "msgs"});
+  box.replaceChildren(msgs, composer(placeholder), h("div", {id: "typing"}));
+  fillMessages(msgs);
+  msgs.scrollTop = msgs.scrollHeight;
+  renderReplyBar(); renderTyping();
+  if (matchMedia("(pointer: fine)").matches && !editing) $("#text")?.focus();
+}
+function fillMessages(box) {
+  lastMsg = null;
+  box.replaceChildren();
+  const list = hist.get(view.ch) || [];
+  if (!list.length) box.append(h("div", {class: "sys"}, view.kind === "post" ? "No replies yet." : `This is the start of ${chanLabel(view.ch)}. Say hi!`));
+  list.forEach(addChat);
+}
+function refreshMessages() {  // redraw the open channel, keeping the scroll position
+  const box = $("#msgs");
+  if (!box) return;
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80, top = box.scrollTop;
+  fillMessages(box);
+  box.scrollTop = atBottom ? box.scrollHeight : top;
+}
+
+function addChat(m) {
+  const box = $("#msgs");
+  if (!box) return;
+  box.querySelector(".sys:only-child")?.remove();
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+  const who = m.uid || m.id;
+  const grouped = lastMsg && (lastMsg.uid || lastMsg.id) === who && lastMsg.name === m.name && !m.reply && m.ts - lastMsg.ts < 5 * 60e3;
+  const color = `hsl(${hue(who)} 60% 70%)`;
+  const div = h("div", {class: "msg" + (grouped ? " cont" : "") + (mentionsMe(m) ? " mention" : ""), "data-mid": m.mid || ""});
+  const openProfile = e => showProfile(personFor(m), e);
+  const gut = h("div", {class: "gut"}, grouped ? h("time", {}, fmtClock(m.ts)) : avatar({id: who, name: m.name}));
+  if (!grouped) gut.firstChild.onclick = openProfile;
+  const body = h("div", {class: "body"});
+  if (m.reply) {
+    const r = findMsg(m.ch, m.reply.mid);
+    div.append(h("div", {class: "replyline", title: "Jump to the message", onclick: () => jumpTo(m.reply.mid)},
+      h("b", {style: `color:hsl(${hue(r?.uid || r?.id || m.reply.name)} 60% 70%)`}, "@" + m.reply.name),
+      h("span", {class: "cn"}, r ? (r.text || (r.file ? "📎 " + r.file.name : "")) : m.reply.text || "Original message was deleted")));
+  }
+  if (!grouped)
+    body.append(h("div", {class: "hd"}, h("b", {style: `color:${color}`, onclick: openProfile}, m.name), h("time", {title: new Date(m.ts).toLocaleString()}, fmtTime(m.ts)),
+      m.pinned ? h("span", {class: "tiny", title: "Pinned"}, " 📌") : null));
+  if (editing && editing === m.mid) body.append(editBox(m));
+  else if (m.text) {
+    const tx = h("div", {class: "tx"});
+    richText(tx, m.text);
+    if (m.edited) tx.append(h("span", {class: "edited", title: new Date(m.edited).toLocaleString()}, " (edited)"));
+    body.append(tx);
+  }
+  if (m.file) body.append(attachment(m.file));
+  if (m.reactions && Object.keys(m.reactions).length) body.append(reactRow(m));
+  div.append(gut, body);
+  if (m.mid) {
+    div.append(msgTools(m));
+    div.oncontextmenu = e => { e.preventDefault(); msgMenu(m, e.clientX, e.clientY); };
+  }
+  box.append(div);
+  if (atBottom || m.uid === myUid) box.scrollTop = box.scrollHeight;
+  lastMsg = m;
+}
+function personFor(m) {
+  return everyone().find(p => p.uid && p.uid === m.uid) || {id: m.uid || m.id, uid: m.uid, name: m.name, offline: true};
+}
+function nameOfUid(uid) { return everyone().find(p => p.uid === uid)?.name || "someone"; }
+
+function msgTools(m) {
+  const mine = m.uid === myUid;
+  const b = (ic, title, fn) => h("button", {class: "ib", title, onclick: e => { e.stopPropagation(); fn(e.currentTarget); }}, icon(ic));
+  return h("div", {class: "tools"},
+    ...frequent().slice(0, 3).map(em => h("button", {class: "ib qe", title: `React with ${em}`, onclick: () => react(m, em)}, em)),
+    b("smile", "Add reaction", el => emojiPicker(el, em => react(m, em))),
+    b("reply", "Reply", () => startReply(m)),
+    mine && m.text ? b("pencil", "Edit", () => startEdit(m)) : null,
+    b("more", "More", el => { const r = el.getBoundingClientRect(); msgMenu(m, r.left - 150, r.bottom + 4); }));
+}
+function msgMenu(m, x, y) {
+  const mine = m.uid === myUid;
+  menu([
+    {el: h("div", {class: "qrx"}, ...frequent().slice(0, 4).map(em => h("button", {title: `React with ${em}`, onclick: () => { closePop(); react(m, em); }}, em)))},
+    {label: "Add Reaction", fn: () => emojiPicker(null, em => react(m, em), false, x, y)},
+    mine && m.text && {label: "Edit Message", fn: () => startEdit(m)},
+    {label: "Reply", fn: () => startReply(m)},
+    "-",
+    {label: m.pinned ? "Unpin Message" : "Pin Message", fn: () => send({type: "pin", ch: m.ch, mid: m.mid})},
+    m.text && {label: "Copy Text", fn: () => copyText(m.text)},
+    m.text && "speechSynthesis" in window && {label: "Speak Message", fn: () => speechSynthesis.speak(new SpeechSynthesisUtterance(`${m.name} said ${m.text}`))},
+    {label: "Mark Unread", fn: () => { const id = view?.kind === "post" ? view.parent : m.ch; unread.set(id, 1); renderSidebar(); }},
+    {label: "Copy Message ID", fn: () => copyText(m.mid)},
+    mine && "-",
+    mine && {label: "Delete Message", danger: true, fn: () => confirmDelete(m)},
+  ], x, y);
+}
+function react(m, emoji) { addFrequent(emoji); send({type: "react", ch: m.ch, mid: m.mid, emoji}); }
+function reactRow(m) {
+  return h("div", {class: "reacts"},
+    ...Object.entries(m.reactions).map(([em, uids]) =>
+      h("button", {class: "rc" + (uids.includes(myUid) ? " mine" : ""), title: uids.map(nameOfUid).join(", ") + ` reacted with ${em}`,
+                   onclick: () => react(m, em)}, em, h("span", {}, uids.length))),
+    h("button", {class: "rc", title: "Add reaction", onclick: e => emojiPicker(e.currentTarget, em => react(m, em))}, icon("smile")));
+}
+function startReply(m) {
+  replyTo = {ch: m.ch, mid: m.mid, name: m.name};
+  renderReplyBar();
+  $("#text")?.focus();
+}
+function renderReplyBar() {
+  const bar = $("#replyBar");
+  if (!bar) return;
+  bar.hidden = !replyTo || replyTo.ch !== view?.ch;
+  if (bar.hidden) return;
+  bar.replaceChildren(h("span", {}, "Replying to ", h("b", {}, replyTo.name)),
+    h("button", {class: "ib", type: "button", title: "Cancel reply (Esc)", onclick: () => { replyTo = null; renderReplyBar(); }}, icon("x")));
+}
+function startEdit(m) {
+  editing = m.mid; editDraft = m.text;
+  refreshMessages();
+}
+function stopEdit() {
+  editing = editDraft = null;
+  refreshMessages();
+  $("#text")?.focus();
+}
+function editBox(m) {
+  const inp = h("textarea", {class: "editbox", value: editDraft ?? m.text, maxLength: 2000, rows: 1});
+  inp.oninput = () => { editDraft = inp.value; autosize(inp); };
+  inp.onkeydown = e => {
+    if (e.key === "Escape") { e.preventDefault(); stopEdit(); }
+    else if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      const t = inp.value.trim();
+      if (!t && !m.file) { stopEdit(); return confirmDelete(m); }
+      if (t && t !== m.text) send({type: "edit", ch: m.ch, mid: m.mid, text: t});
+      stopEdit();
+    }
+  };
+  setTimeout(() => { if (!inp.isConnected) return; inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); autosize(inp); });
+  return h("div", {}, inp, h("div", {class: "tiny"}, "Escape to cancel · Enter to save"));
+}
+function confirmDelete(m) {
+  if (confirm("Delete this message? This can't be undone.")) send({type: "del", ch: m.ch, mid: m.mid});
+}
+function jumpTo(mid) {
+  const el = [...document.querySelectorAll("#msgs .msg")].find(x => x.dataset.mid === mid);
+  if (!el) return toast("That message isn't here anymore.");
+  el.scrollIntoView({block: "center", behavior: "smooth"});
+  el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
+}
+
+/* ---------- message box: emoji, @mentions, typing, replies ---------- */
+function autosize(t) { t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, innerHeight * 0.4) + "px"; }
+function insertAtCursor(input, text) {
+  if (!input) return;
+  const a = input.selectionStart ?? input.value.length, b = input.selectionEnd ?? a;
+  input.value = input.value.slice(0, a) + text + input.value.slice(b);
+  input.setSelectionRange(a + text.length, a + text.length);
+  input.focus(); autosize(input);
+}
+function composer(placeholder) {
+  const input = h("textarea", {id: "text", maxLength: 2000, autocomplete: "off", placeholder, rows: 1});
+  const picker = h("input", {type: "file", multiple: true, hidden: true});
+  picker.onchange = () => { [...picker.files].forEach(upload); picker.value = ""; };
+  input.onpaste = e => {
+    const list = [...(e.clipboardData?.files || [])];
+    if (list.length) { e.preventDefault(); list.forEach(upload); }
+  };
+  const submit = () => {
+    const text = input.value.trim();
+    if (!text) return;
+    send({type: "chat", ch: view.ch, text, reply: replyTo?.ch === view.ch ? replyTo.mid : undefined});
+    input.value = ""; autosize(input);
+    replyTo = null; renderReplyBar(); closeAc();
+    lastTypingSent = 0;
+  };
+  input.onkeydown = e => {
+    if (acKey(e)) return;
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); }
+    else if (e.key === "Escape" && replyTo) { replyTo = null; renderReplyBar(); }
+    else if (e.key === "ArrowUp" && !input.value) {  // like Discord: Up edits your last message
+      const last = [...(hist.get(view.ch) || [])].reverse().find(x => x.uid === myUid && x.text);
+      if (last) { e.preventDefault(); startEdit(last); }
+    }
+  };
+  input.oninput = () => { autosize(input); sendTyping(); mentionSuggest(input); };
+  input.onblur = () => setTimeout(closeAc, 150);
+  return h("div", {id: "compWrap"}, h("div", {id: "replyBar", hidden: true}),
+    h("form", {id: "composer", onsubmit: e => { e.preventDefault(); submit(); }},
+      h("button", {type: "button", class: "ib", title: "Upload a file (or drag it in, or paste it)", onclick: () => picker.click()}, icon("plusCircle")),
+      input, picker,
+      h("button", {type: "button", class: "ib", title: "Emoji", onclick: e => emojiPicker(e.currentTarget, em => insertAtCursor(input, em), true)}, icon("smile"))));
+}
+
+let lastTypingSent = 0;
+function sendTyping() {
+  if (!view || Date.now() - lastTypingSent < 3000 || !$("#text")?.value.trim()) return;
+  lastTypingSent = Date.now();
+  send({type: "typing", ch: view.ch});
+}
+function renderTyping() {
+  const el = $("#typing");
+  if (!el) return;
+  const now = Date.now();
+  const names = [...typingNow.values()].filter(t => t.ch === view?.ch && t.until > now).map(t => t.name);
+  el.replaceChildren(!names.length ? "" : names.length === 1 ? h("span", {}, h("b", {}, names[0]), " is typing…")
+    : names.length <= 3 ? h("span", {}, h("b", {}, names.slice(0, -1).join(", ")), " and ", h("b", {}, names.at(-1)), " are typing…")
+    : "Several people are typing…");
+}
+setInterval(renderTyping, 1000);
+
+let ac = null;  // @mention suggestions: {el, names, i, pick}
+function mentionSuggest(input) {
+  closeAc();
+  const pos = input.selectionStart, before = input.value.slice(0, pos), m = before.match(/(^|\s)@([^\s@]{0,32})$/);
+  if (!m) return;
+  const q = m[2].toLowerCase(), start = pos - m[2].length - 1;
+  const names = [...new Set([...[...people.values()].map(p => p.name), "everyone", "here"])].filter(n => n.toLowerCase().startsWith(q)).slice(0, 8);
+  if (!names.length) return;
+  const pick = n => {
+    input.value = input.value.slice(0, start) + "@" + n + " " + input.value.slice(pos);
+    const c = start + n.length + 2;
+    input.setSelectionRange(c, c);
+    closeAc(); input.focus();
+  };
+  const el = h("div", {class: "ac"}, h("div", {class: "sub"}, "Members"),
+    ...names.map((n, i) => h("div", {class: "acrow" + (i ? "" : " sel"), onmousedown: e => { e.preventDefault(); pick(n); }}, "@" + n)));
+  $("#compWrap").prepend(el);
+  ac = {el, names, i: 0, pick};
+}
+function closeAc() { ac?.el.remove(); ac = null; }
+function acKey(e) {
+  if (!ac) return false;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    ac.i = (ac.i + (e.key === "ArrowDown" ? 1 : ac.names.length - 1)) % ac.names.length;
+    [...ac.el.querySelectorAll(".acrow")].forEach((r, k) => r.classList.toggle("sel", k === ac.i));
+  } else if (e.key === "Tab" || e.key === "Enter") ac.pick(ac.names[ac.i]);
+  else if (e.key === "Escape") closeAc();
+  else return false;
+  e.preventDefault();
+  return true;
+}
+
+// Plain Unicode emoji (drawn by your system's emoji font).
+const EMOJI = {
+  "Smileys": "😀😃😄😁😆😅😂🤣😊😇🙂🙃😉😌😍🥰😘😋😛😜🤪😎🤩🥳😏😒😞😔😟😕🙁😣😖😫😩🥺😢😭😤😠😡🤯😳🥵🥶😱😨😰😥😓🤗🤔🤭🤫😶😐😑😬🙄😯😮😲🥱😴🤤😵🤐🥴🤢🤮🤧😷🤒🤕🤑🤠😈👿🤡💩👻💀👽👾🤖🎃",
+  "People": "👋🤚✋🖖👌🤌🤏✌️🤞🤟🤘🤙👈👉👆👇☝️👍👎✊👊🤛🤜👏🙌👐🤲🤝🙏✍️💪🧠👀👅👄💋🫡🫶",
+  "Nature": "🐶🐱🐭🐹🐰🦊🐻🐼🐨🐯🦁🐮🐷🐸🐵🐔🐧🐦🐤🦆🦅🦉🐺🐴🦄🐝🐛🦋🐌🐞🐢🐍🐙🦀🐬🐳🦈🐊🌵🌲🌴🌱🍀🍁🍄🌸🌹🌻🌞🌙⭐🌟✨⚡🔥🌈☀️☁️❄️💧🌊",
+  "Food": "🍏🍎🍊🍋🍌🍉🍇🍓🍒🍑🥭🍍🥥🥝🍅🥑🥦🌽🥕🥐🍞🧀🥚🍳🥓🍔🍟🍕🌭🥪🌮🌯🍝🍜🍣🍤🍩🍪🎂🍰🧁🍫🍬🍭🍿☕🍵🥤🍺🍻🥂🍷",
+  "Activities": "⚽🏀🏈⚾🎾🏐🏓🏸🏒⛳🏹🎣🥊🛹🏆🥇🥈🥉🏅🎮🕹️🎲♟️🎯🎳🎸🎹🎺🎻🥁🎤🎧🎬🎨🎭",
+  "Objects": "💻🖥️⌨️🖱️📱📷📹🎥📺⏰⌛💡🔦💸💵💰💳💎🔧🔨⚙️💣🛡️🔮💊🧪🔑🚪🎁🎈🎉🎊✉️📦📝📌📎✂️🔒🔓",
+  "Symbols": "❤️🧡💛💚💙💜🖤🤍🤎💔❣️💕💞💓💗💖💘💝✅☑️✔️❌➕➖❓❗‼️⁉️💯🔴🟠🟡🟢🔵🟣⚫⚪💤💢💥💫💬💭♻️⚠️🚫⛔🆗🆒🆕🆓",
+};
+const segmenter = new Intl.Segmenter();
+const splitEmoji = s => [...segmenter.segment(s)].map(x => x.segment).filter(x => x.trim());
+function frequent() {
+  let f = {};
+  try { f = JSON.parse(localStorage.lcFreq || "{}"); } catch {}
+  const top = Object.entries(f).sort((a, b) => b[1] - a[1]).map(e => e[0]).slice(0, 9);
+  return top.length ? top : ["👍", "😂", "❤️"];
+}
+function addFrequent(em) {
+  let f = {};
+  try { f = JSON.parse(localStorage.lcFreq || "{}"); } catch {}
+  f[em] = (f[em] || 0) + 1;
+  localStorage.lcFreq = JSON.stringify(Object.fromEntries(Object.entries(f).sort((a, b) => b[1] - a[1]).slice(0, 30)));
+}
+function emojiPicker(anchor, onPick, keepOpen = false, x = 0, y = 0) {
+  const grid = list => h("div", {class: "emojis"}, ...list.map(em => h("button", {type: "button", title: em, onclick: () => {
+    addFrequent(em); onPick(em); if (!keepOpen) closePop();
+  }}, em)));
+  const parts = [h("div", {class: "sub"}, "Frequently used"), grid(frequent())];
+  for (const [name, s] of Object.entries(EMOJI)) parts.push(h("div", {class: "sub"}, name), grid(splitEmoji(s)));
+  openPop(h("div", {class: "epick"}, ...parts), anchor, x, y);
+}
+
+/* ---------- pop-up menus and panels ---------- */
+let pop = null;
+function openPop(content, anchor, x = 0, y = 0) {
+  closePop();
+  pop = h("div", {class: "pop"}, content);
+  document.body.append(pop);
+  const r = anchor ? anchor.getBoundingClientRect() : {left: x, top: y, bottom: y};
+  const w = pop.offsetWidth, ht = pop.offsetHeight;
+  let top = r.bottom + 6;
+  if (top + ht > innerHeight - 8) top = Math.max(8, r.top - ht - 6);
+  pop.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + "px";
+  pop.style.top = top + "px";
+  return pop;
+}
+function closePop() { pop?.remove(); pop = null; }
+addEventListener("mousedown", e => { if (pop && !pop.contains(e.target)) closePop(); }, true);
+addEventListener("keydown", e => { if (e.key === "Escape") closePop(); });
+function menu(items, x, y) {
+  const list = [];
+  for (const it of items.filter(Boolean)) if (it !== "-" || (list.length && list.at(-1) !== "-")) list.push(it);
+  while (list.at(-1) === "-") list.pop();
+  openPop(h("div", {class: "menu"}, ...list.map(it => it === "-" ? h("div", {class: "msep"}) : it.el ? it.el
+    : h("button", {class: "mi" + (it.danger ? " danger" : ""), onclick: () => { closePop(); it.fn(); }},
+        it.dot ? h("span", {class: "sd", style: `background:${it.dot}`}) : null,
+        h("span", {}, it.label, it.hint ? h("div", {class: "hint"}, it.hint) : null),
+        it.radio !== undefined ? h("span", {class: "rd" + (it.radio ? " on" : "")}) : null,
+        it.check !== undefined ? h("span", {class: "ck" + (it.check ? " on" : "")}) : null))), null, x, y);
+}
+function showPins() {
+  if (!isChatView()) return;
+  const list = (hist.get(view.ch) || []).filter(m => m.pinned).reverse();
+  openPop(h("div", {class: "plist"}, h("h3", {}, "Pinned Messages"),
+    ...(list.length ? list.map(m => h("div", {class: "pitem", onclick: () => { closePop(); jumpTo(m.mid); }},
+      h("b", {}, m.name), " ", h("span", {class: "tiny"}, fmtTime(m.ts)), h("div", {class: "tx"}, m.text || (m.file ? "📎 " + m.file.name : ""))))
+      : [h("p", {class: "tiny"}, "Nothing pinned here yet. Hover a message, click ⋯ and choose Pin Message.")])), $("#pinsBtn"));
+}
+function runSearch(q) {
+  q = q.trim().toLowerCase();
+  if (!q) return;
+  const found = [];
+  for (const list of hist.values()) for (const m of list)
+    if ((m.text || "").toLowerCase().includes(q) || m.name.toLowerCase() === q || (m.file?.name || "").toLowerCase().includes(q)) found.push(m);
+  found.sort((a, b) => b.ts - a.ts);
+  openPop(h("div", {class: "plist"}, h("h3", {}, `${found.length} result${found.length === 1 ? "" : "s"}`),
+    ...found.slice(0, 50).map(m => h("div", {class: "pitem", onclick: () => { closePop(); openChat(m.ch); jumpTo(m.mid); }},
+      h("span", {class: "tiny"}, chanLabel(m.ch) + " · "), h("b", {}, m.name), " ", h("span", {class: "tiny"}, fmtTime(m.ts)),
+      h("div", {class: "tx"}, m.text || (m.file ? "📎 " + m.file.name : ""))))), $("#search"));
+}
+
+function renderForum(c) {
+  $("#chTitle").replaceChildren(h("span", {}, ICONS.forum), h("span", {class: "cn"}, c.name));
+  const title = h("input", {placeholder: "Post title", maxLength: 100});
+  const body = h("textarea", {placeholder: "What do you want to talk about?", maxLength: 2000, rows: 3});
+  const form = h("form", {class: "newpost", onsubmit: e => {
+      e.preventDefault();
+      if (!title.value.trim()) return title.focus();
+      send({type: "post", ch: c.id, title: title.value, text: body.value});
+      title.value = body.value = "";
+    }}, title, body, h("button", {class: "btn primary"}, "Post"));
+  const posts = [...c.posts].sort((a, b) => b.last - a.last).map(p =>
+    h("div", {class: "post", onclick: () => openView({ch: p.id, kind: "post", parent: c.id})},
+      h("div", {class: "pt"}, p.title),
+      h("div", {class: "pm"}, `${p.author} · ${p.count} ${p.count === 1 ? "reply" : "replies"} · ${fmtTime(p.last)}`)));
+  $("#view").replaceChildren(h("div", {class: "forum"}, form,
+    posts.length ? h("div", {}, ...posts) : h("div", {class: "sys"}, "No posts yet. Start the first one!")));
+}
+
+function createChannel(kind) {
+  const label = GROUPS.find(g => g[0] === kind)[1].replace(/s$/, "").toLowerCase();
+  const name = prompt(`Name for the new ${label}:`);
+  if (name?.trim()) send({type: "channel", action: "create", kind, name});
+}
+function renameChannel(c) {
+  const name = prompt(`New name for "${c.name}":`, c.name);
+  if (name?.trim() && name.trim() !== c.name) send({type: "channel", action: "rename", ch: c.id, name});
+}
+function deleteChannel(c) {
+  if (confirm(`Delete "${c.name}"? Everything in it will be gone.`)) send({type: "channel", action: "delete", ch: c.id});
+}
+
+/* ---------- file sharing ---------- */
+// Files go to the host in pieces over the direct link. Everyone then downloads a copy
+// from the host in the background, so the files survive if the host leaves.
+const upOut = new Map();  // our uploads waiting for the host: up id -> {line, file}
+async function upload(file) {
+  if (!isChatView()) return;
+  if (!file.size) return toast(`"${file.name}" is empty.`);
+  if (file.size > MAX_FILE) return toast(`"${file.name}" is too big. The limit is 25 MB.`);
+  if (!ready) return toast("Still connecting. Try again in a moment.");
+  const ch = view.ch;
+  if (amHost()) {
+    if (filesUsed() + file.size > MAX_FILES_TOTAL) return toast("There's no room left for files in this server.");
+    return hostChat(myId, {uid: myUid, name: myName}, {ch, text: "", file: hostAddFile(file.name, file)});
+  }
+  const up = rid(), host = leader;
+  const line = h("div", {}, `Uploading ${file.name}…`);
+  $("#uploads").append(line);
+  upOut.set(up, {line, file});
+  toPeer(host, {type: "upload", up, name: file.name, size: file.size, ch});
+  for (let off = 0; off < file.size; off += CHUNK) {
+    if (leader !== host || !upOut.has(up)) return;
+    await drain(host);
+    pathTo(host)(frame({t: "up", up, off}, new Uint8Array(await file.slice(off, off + CHUNK).arrayBuffer())));
+    line.textContent = `Uploading ${file.name}… ${Math.round(Math.min(off + CHUNK, file.size) / file.size * 100)}%`;
+  }
+  line.textContent = `Sending ${file.name}…`;
+}
+
+// File info comes from the host; check it before using it.
+function registerFile(raw) {
+  if (!raw || !FID.test(raw.id)) return null;
+  if (!fileMeta.has(raw.id)) {
+    const size = Math.floor(+raw.size);
+    if (!(size > 0 && size <= MAX_FILE)) return null;
+    fileMeta.set(raw.id, {id: raw.id, name: safeName(raw.name), size, type: String(raw.type ?? "").slice(0, 100)});
+  }
+  const f = fileMeta.get(raw.id);
+  wantFile(f);
+  saveFile(f.id);
+  return f;
+}
+function fixFile(msg) {
+  if (!msg?.file) return;
+  const f = registerFile(msg.file);
+  if (f) msg.file = f; else delete msg.file;
+}
+
+/* ---------- saving: every device keeps its own copy, like a torrent seeder ---------- */
+// When someone comes back, their copy brings the server back even if nobody else is online,
+// and it's merged with everyone else's. Stored in this browser only (IndexedDB).
+const savedFiles = new Set();
+const dbp = new Promise((res, rej) => {
+  const r = indexedDB.open("litecord", 1);
+  r.onupgradeneeded = () => { r.result.createObjectStore("rooms"); r.result.createObjectStore("files"); };
+  r.onsuccess = () => res(r.result);
+  r.onerror = () => rej(r.error);
+}).catch(() => null);
+function idb(store, mode, fn) {
+  return dbp.then(db => db && new Promise((res, rej) => {
+    const tx = db.transaction(store, mode), req = fn(tx.objectStore(store));
+    tx.oncomplete = () => res(req?.result);
+    tx.onerror = () => rej(tx.error);
+  })).catch(err => { console.warn(err); return null; });
+}
+const fileKeys = () => IDBKeyRange.bound(room + "/", room + "/\uffff");
+async function loadSaved() {
+  const s = await idb("rooms", "readonly", st => st.get(room));
+  if (!s || !Array.isArray(s.channels) || !s.channels.length || haveData) return;
+  const files = await idb("files", "readonly", st => st.getAll(fileKeys()));
+  for (const f of files || []) {
+    if (!f?.meta || !FID.test(f.meta.id) || !(f.blob instanceof Blob)) continue;
+    fileMeta.set(f.meta.id, f.meta); blobs.set(f.meta.id, f.blob); savedFiles.add(f.meta.id);
+  }
+  applySnapshot(s);
+  haveData = true;
+  status("Saved copy · connecting…");
+  afterSync(); renderSidebar();
+}
+let saveTimer = 0;
+function scheduleSave() {
+  if (saveTimer === -1) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    await idb("rooms", "readwrite", st => st.put({...snapshot(), saved: Date.now()}, room));
+    const used = new Set();  // forget saved files no message points to anymore
+    for (const list of hist.values()) for (const m of list) if (m.file) used.add(m.file.id);
+    const old = [...savedFiles].filter(fid => !used.has(fid));
+    if (old.length) await idb("files", "readwrite", st => { old.forEach(fid => { st.delete(room + "/" + fid); savedFiles.delete(fid); }); });
+  }, 1500);
+}
+function saveFile(fid) {
+  if (savedFiles.has(fid) || !blobs.has(fid) || !fileMeta.has(fid)) return;
+  savedFiles.add(fid);
+  idb("files", "readwrite", st => st.put({meta: fileMeta.get(fid), blob: blobs.get(fid)}, room + "/" + fid));
+}
+
+const wanted = [];   // file ids to download from the host, in order
+let fetching = null; // {fid, parts, got, last}
+function wantFile(f) {
+  if (blobs.has(f.id) || missing.has(f.id) || fetching?.fid === f.id || wanted.includes(f.id)) return;
+  wanted.push(f.id);
+  nextFetch();
+}
+const fileSources = new Map();  // host only: file id -> someone online who has it
+function nextFetch() {
+  if (fetching || !ready) return;
+  for (let i = 0; i < wanted.length; i++) {
+    const fid = wanted[i];
+    if (blobs.has(fid) || missing.has(fid)) { wanted.splice(i--, 1); continue; }
+    const from = amHost() ? fileSources.get(fid) : leader;
+    if (!from || from === myId || !present.has(from)) continue;  // the host waits for someone who has it
+    wanted.splice(i, 1);
+    fetching = {fid, from, parts: new Map(), got: 0, last: Date.now()};
+    return toPeer(from, {type: "getfile", fid});
+  }
+}
+function fileChunk(hd, body) {
+  const f = fetching, meta = f && fileMeta.get(f.fid), off = hd.off;
+  if (!meta || hd.fid !== f.fid || !Number.isInteger(off) || off < 0 || off % CHUNK || off >= meta.size || f.parts.has(off)
+      || body.length !== Math.min(CHUNK, meta.size - off)) return;
+  f.parts.set(off, body);
+  f.got += body.length;
+  f.last = Date.now();
+  if (f.got < meta.size) return;
+  blobs.set(f.fid, new Blob([...f.parts].sort((a, b) => a[0] - b[0]).map(e => e[1])));
+  fetching = null;
+  fileChanged(meta.id);
+  nextFetch();
+}
+setInterval(() => {  // a download that stalled: put it at the back of the line and move on
+  if (fetching && Date.now() - fetching.last > 30000) { wanted.push(fetching.fid); fetching = null; nextFetch(); }
+}, 10000);
+
+function guessType(name) { return TYPES[String(name).split(".").pop().toLowerCase()] || "application/octet-stream"; }
+function safeName(name) {
+  name = String(name ?? "").replaceAll("\\", "/").split("/").pop();
+  name = name.replace(/[\p{C}"<>|:*?]/gu, "").trim().slice(0, 100);
+  return name || "file";
+}
+// Only known picture, video and sound types are shown in the chat. Everything else is a plain download.
+function fileURL(f) {
+  if (!urls.has(f.id) && blobs.has(f.id))
+    urls.set(f.id, URL.createObjectURL(new Blob([blobs.get(f.id)], {type: INLINE.has(f.type) ? f.type : "application/octet-stream"})));
+  return urls.get(f.id);
+}
+function fileChanged(fid) {
+  saveFile(fid);
+  const meta = fileMeta.get(fid);
+  if (meta && FID.test(fid)) document.querySelectorAll(`[data-fid="${fid}"]`).forEach(el => el.replaceWith(attachment(meta)));
+}
+function attachment(f) {
+  const url = fileURL(f), inline = INLINE.has(f.type);
+  if (!url) {
+    const gone = missing.has(f.id);
+    return h("span", {class: "att-file", "data-fid": f.id}, gone ? "⚠️" : "⏳", f.name,
+             h("span", {class: "dim"}, gone ? "not available anymore" : fmtSize(f.size)));
+  }
+  const keepScrolled = () => { const b = $("#msgs"); if (b && b.scrollHeight - b.scrollTop - b.clientHeight < 400) b.scrollTop = b.scrollHeight; };
+  if (inline && f.type.startsWith("image/"))
+    return h("a", {href: url, target: "_blank", rel: "noopener"}, h("img", {src: url, alt: f.name, class: "att-img", onload: keepScrolled}));
+  if (inline && f.type.startsWith("video/"))
+    return h("video", {src: url, controls: true, preload: "metadata", class: "att-vid", onloadedmetadata: keepScrolled});
+  if (inline && f.type.startsWith("audio/"))
+    return h("div", {}, h("audio", {src: url, controls: true, preload: "metadata"}));
+  return h("a", {href: url, download: f.name, class: "att-file"}, "📄", f.name, h("span", {class: "dim"}, fmtSize(f.size)));
+}
+function fmtSize(n) { return n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(0) + " KB" : (n / 1048576).toFixed(1) + " MB"; }
+
+const mainEl = $("main");
+addEventListener("dragover", e => e.preventDefault());  // don't let a missed drop open the file
+addEventListener("drop", e => e.preventDefault());
+mainEl.addEventListener("dragover", e => { if (isChatView() && e.dataTransfer.types.includes("Files")) document.body.classList.add("dropping"); });
+mainEl.addEventListener("dragleave", e => { if (!mainEl.contains(e.relatedTarget)) document.body.classList.remove("dropping"); });
+mainEl.addEventListener("drop", e => {
+  document.body.classList.remove("dropping");
+  if (isChatView()) [...e.dataTransfer.files].forEach(upload);
+});
+
+/* ---------- voice, stage and presence state ---------- */
+const isStage = () => chById(voiceCh)?.kind === "stage";
+const canSend = () => !!voiceCh && (!isStage() || me.speaker);
+function myState() {
+  return {voice: voiceCh, muted, deaf, cam: camStream?.id || null, screen: screenStream?.id || null,
+          hand: me.hand, speaker: me.speaker};
+}
+function sendState() { send({type: "state", state: myState()}); }
+const stateOf = id => id === myId ? myState() : people.get(id)?.state || {};
+const sameCall = id => !!voiceCh && people.get(id)?.state?.voice === voiceCh;
+
+function onState(id, st) {
+  if (id === myId) {  // the host decides who is a speaker on a stage
+    selfAuth = st;
+    const was = me.speaker;
+    me.speaker = !!st.speaker;
+    me.hand = !!st.hand;
+    if (was !== me.speaker) {
+      if (voiceCh && st.voice === voiceCh) toast(me.speaker ? "🎙️ You're a speaker now." : "You're in the audience.");
+      if (!me.speaker) { stopCamera(false); stopShare(false); }
+      updateMic();
+    }
+    renderSidebar(); renderPanel(); syncMedia();
+    return;
+  }
+  const p = people.get(id);
+  if (!p) return;
+  const prev = p.state || {};
+  p.state = st;
+  if (voiceCh) {  // sounds for your call
+    if (st.voice === voiceCh && prev.voice !== voiceCh) sfx("userJoin");
+    else if (prev.voice === voiceCh && st.voice !== voiceCh) sfx("userLeave");
+    else if (st.voice === voiceCh && !!st.screen !== !!prev.screen) sfx(st.screen ? "streamStart" : "streamStop");
+  }
+  for (const [tid, r] of [...remote])
+    if (r.peer === id && r.kind !== "voice" && r.streamId !== st.cam && r.streamId !== st.screen) removeRemote(tid);
+  relabelTiles(); renderSidebar(); syncMedia();
+}
+
+async function joinVoice(id) {
+  if (voiceCh === id) return;
+  if (!canMedia) return toast("Voice needs HTTPS. See the README.");
+  if (voiceCh) leaveVoice();
+  voiceCh = id;
+  me.speaker = me.hand = false;
+  micFailed = false;
+  sendState();
+  sfx("join");
+  openView({ch: id, kind: "call"});
+  renderPanel();
+  await updateMic();
+}
+function leaveVoice() {
+  if (!voiceCh) return;
+  sfx("leave");
+  voiceCh = null;
+  me.speaker = me.hand = false;
+  stopCamera(false); stopShare(false);
+  updateMic();
+  sendState(); syncMedia(); renderSidebar(); renderPanel();
+}
+
+/* ---------- your voice: AI noise suppression, input volume, voice activity and push-to-talk ---------- */
+// mic → AI noise removal → input volume → voice gate → your friends
+const NOISE = {
+  rnnoise: {worklet: "/vendor/noise/rnnoise-worklet.js", name: "@sapphi-red/web-noise-suppressor/rnnoise"},
+  gtcrn: {worklet: "/vendor/noise/gtcrn-worklet.js", name: "@sapphi-red/web-noise-suppressor/gtcrn"},
+};
+const simdOK = (() => {  // newer CPUs run RNNoise faster with SIMD
+  try { return WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253, 15, 253, 98, 11])); }
+  catch { return false; }
+})();
+const wasmCache = {};
+function noiseModel(kind) {
+  const url = kind === "gtcrn" ? "/vendor/noise/gtcrn.wasm" : simdOK ? "/vendor/noise/rnnoise_simd.wasm" : "/vendor/noise/rnnoise.wasm";
+  return wasmCache[url] ||= fetch(url).then(r => {
+    if (!r.ok) throw new Error("couldn't load the noise model");
+    return r.arrayBuffer();
+  }).catch(err => { delete wasmCache[url]; throw err; });
+}
+let micProc = null, micTest = null;
+// Builds the processed microphone. Returns {stream, level, threshold, open, inGain, gate, stop()}.
+async function buildMic(raw, {loopback = false} = {}) {
+  const ctx = new AudioContext({sampleRate: 48000, latencyHint: "interactive"});
+  if (ctx.state === "suspended") ctx.resume().catch(() => {});
+  const mic = {ctx, level: -100, threshold: -50, open: false};
+  let node = ctx.createMediaStreamSource(raw), denoise = null;
+  if (NOISE[prefs.nsMode]) {
+    try {
+      const wasmBinary = await noiseModel(prefs.nsMode);
+      await ctx.audioWorklet.addModule(NOISE[prefs.nsMode].worklet);
+      denoise = new AudioWorkletNode(ctx, NOISE[prefs.nsMode].name, {processorOptions: {maxChannels: 1, wasmBinary},
+        channelCount: 1, channelCountMode: "explicit", outputChannelCount: [1]});
+      node.connect(denoise);
+      node = denoise;
+    } catch (err) {
+      console.warn(err);
+      toast("AI noise suppression couldn't start, so it's off for now. (" + err.message + ")");
+    }
+  }
+  mic.inGain = ctx.createGain();
+  mic.inGain.gain.value = prefs.inVol;
+  node.connect(mic.inGain);
+  const dest = ctx.createMediaStreamDestination();
+  try {
+    await ctx.audioWorklet.addModule("/voice-gate.js");
+    mic.gate = new AudioWorkletNode(ctx, "litecord-voice-gate", {channelCount: 1, channelCountMode: "explicit", outputChannelCount: [1]});
+    mic.gate.port.onmessage = e => Object.assign(mic, e.data);
+    mic.inGain.connect(mic.gate);
+    mic.gate.connect(dest);
+    if (loopback) mic.gate.connect(ctx.destination);
+    sendGate(mic);
+  } catch (err) {
+    console.warn(err);
+    mic.open = true;
+    mic.inGain.connect(dest);
+    if (loopback) mic.inGain.connect(ctx.destination);
+  }
+  if (loopback && prefs.spk) ctx.setSinkId?.(prefs.spk).catch(() => {});
+  mic.stream = dest.stream;
+  mic.stop = () => {
+    raw.getTracks().forEach(t => t.stop());
+    denoise?.port.postMessage("destroy");
+    ctx.close().catch(() => {});
+  };
+  return mic;
+}
+function sendGate(mic) {
+  mic?.gate?.port.postMessage({mode: prefs.inputMode, auto: !!prefs.autoSens, threshold: prefs.sens, ptt: pttDown});
+}
+function updateGates() { sendGate(micProc); sendGate(micTest); }
+function setInputVolume() { for (const m of [micProc, micTest]) if (m?.inGain) m.inGain.gain.value = prefs.inVol; }
+function stopMic() {
+  if (micProc) micProc.stop();
+  else micStream?.getTracks().forEach(t => t.stop());
+  micProc = null; micStream = null;
+}
+
+// Push-to-talk: hold your key (or a side mouse button) to talk.
+let pttDown = false, pttTimer = 0, recordingKey = null;
+function setPtt(on) { pttDown = on; updateGates(); }
+function pttPress(code) {
+  if (prefs.inputMode !== "ptt" || code !== prefs.pttKey || recordingKey) return false;
+  clearTimeout(pttTimer);
+  if (!pttDown) setPtt(true);
+  return true;
+}
+function pttRelease(code) {
+  if (prefs.inputMode !== "ptt" || code !== prefs.pttKey || !pttDown) return false;
+  clearTimeout(pttTimer);
+  pttTimer = setTimeout(() => setPtt(false), prefs.pttDelay);
+  return true;
+}
+addEventListener("keydown", e => { if (!e.repeat) pttPress(e.code); });
+addEventListener("keyup", e => pttRelease(e.code));
+addEventListener("mousedown", e => { if (e.button >= 3 && pttPress("Mouse" + (e.button + 1))) e.preventDefault(); });
+addEventListener("mouseup", e => { if (e.button >= 3 && pttRelease("Mouse" + (e.button + 1))) e.preventDefault(); });
+addEventListener("blur", () => { if (pttDown) setPtt(false); });  // let go if the window loses focus
+const keyName = code => !code ? "None" : code === "Backquote" ? "`" : code.replace(/^Key|^Digit/, "").replace(/(Left|Right)$/, " ($1)");
+
+// Other people's audio goes through the browser's audio engine, so volumes can go up to 200%.
+let outCtx = null;
+function outputCtx() {
+  if (!outCtx) {
+    try { outCtx = new AudioContext(); } catch { return null; }
+    if (prefs.spk) outCtx.setSinkId?.(prefs.spk).catch(() => {});
+  }
+  if (outCtx.state === "suspended") outCtx.resume().catch(() => {});
+  return outCtx;
+}
+
+/* ---------- message formatting (Discord-style markdown) ---------- */
+function mentionNames() {
+  return [...new Set([myName, ...[...people.values()].map(p => p.name), "everyone", "here"])]
+    .filter(Boolean).sort((a, b) => b.length - a.length).map(escRe);
+}
+function mdPlain(text) {  // @mentions
+  if (!text) return [];
+  const re = new RegExp(`@(?:${mentionNames().join("|")})(?![\\p{L}\\p{N}_])`, "giu");
+  const out = [];
+  let i = 0, m;
+  while ((m = re.exec(text))) { out.push(text.slice(i, m.index), h("span", {class: "mtag"}, m[0])); i = m.index + m[0].length; }
+  out.push(text.slice(i));
+  return out;
+}
+const MD_INLINE = [
+  {re: /https?:\/\/[^\s<>"]*[^\s<>".,:;!?)\]'"]/, make: m => h("a", {href: m[0], target: "_blank", rel: "noopener noreferrer"}, m[0])},
+  {re: /`([^`\n]+)`/, make: m => h("code", {class: "icode"}, m[1])},
+  {re: /\|\|([\s\S]+?)\|\|/, nest: true, make: (m, kids) => {
+    const s = h("span", {class: "spoiler", title: "Spoiler: click to show"}, ...kids);
+    s.onclick = () => s.classList.add("shown");
+    return s;
+  }},
+  {re: /\*\*([\s\S]+?)\*\*/, nest: true, make: (m, kids) => h("strong", {}, ...kids)},
+  {re: /__([\s\S]+?)__/, nest: true, make: (m, kids) => h("u", {}, ...kids)},
+  {re: /~~([\s\S]+?)~~/, nest: true, make: (m, kids) => h("s", {}, ...kids)},
+  {re: /\*(?!\s)([^*\n]+?)\*/, nest: true, make: (m, kids) => h("em", {}, ...kids)},
+  {re: /(?<![\p{L}\p{N}_])_(?!\s)([^_\n]+?)_(?![\p{L}\p{N}_])/u, nest: true, make: (m, kids) => h("em", {}, ...kids)},
+];
+function mdInline(text, depth = 0) {
+  let best = null;
+  if (depth < 6) for (const rule of MD_INLINE) {
+    const m = rule.re.exec(text);
+    if (m && (!best || m.index < best.m.index)) best = {m, rule};
+  }
+  if (!best) return mdPlain(text);
+  const {m, rule} = best;
+  return [...mdPlain(text.slice(0, m.index)), rule.make(m, rule.nest ? mdInline(m[1], depth + 1) : null),
+          ...mdInline(text.slice(m.index + m[0].length), depth)];
+}
+function mdLines(text) {  // "> " quotes
+  const out = [];
+  let quote = null, plain = [];
+  const flush = () => {
+    if (plain.length) { out.push(...mdInline(plain.join("\n"))); plain = []; }
+    if (quote) { out.push(h("div", {class: "quote"}, ...mdInline(quote.join("\n")))); quote = null; }
+  };
+  for (const line of text.split("\n")) {
+    const q = /^> (.*)$/.exec(line);
+    if (q) { if (plain.length) flush(); (quote ||= []).push(q[1]); }
+    else { if (quote) flush(); plain.push(line); }
+  }
+  flush();
+  return out;
+}
+function md(text) {  // ```code blocks```
+  const out = [], re = /```(?:([\w+#-]{1,20})\n)?([\s\S]*?)```/g;
+  let i = 0, m;
+  while ((m = re.exec(text))) {
+    out.push(...mdLines(text.slice(i, m.index).replace(/\n$/, "")));
+    out.push(h("pre", {class: "codeblock"}, h("code", {}, m[2].replace(/^\n+|\n+$/g, ""))));
+    i = m.index + m[0].length;
+  }
+  out.push(...mdLines(text.slice(i).replace(/^\n/, "")));
+  return out;
+}
+function richText(el, text) { el.append(...md(text)); }
+
+// Grab the mic only when we're allowed to talk (not while sitting in a stage audience).
+async function updateMic() {
+  if (micBusy) return;
+  micBusy = true;
+  try {
+    if (canSend() && !micStream && !micFailed) {
+      try {
+        const raw = await navigator.mediaDevices.getUserMedia({audio: micConstraints()});
+        try { micProc = await buildMic(raw); micStream = micProc.stream; }
+        catch (err) { console.warn(err); micProc = null; micStream = raw; }  // fall back to the plain mic
+      } catch (err) {
+        micFailed = true;
+        toast("Couldn't use your microphone: " + err.message + ". You can still listen.");
+      }
+    } else if (!canSend() && micStream) stopMic();
+  } finally { micBusy = false; }
+  if (canSend() !== !!micStream && !micFailed) return updateMic();  // things changed while waiting
+  applyMicEnabled(); syncMedia(); renderPanel();
+}
+function micConstraints() {
+  return {deviceId: prefs.mic ? {ideal: prefs.mic} : undefined, echoCancellation: prefs.ec,
+          noiseSuppression: prefs.nsMode === "browser", autoGainControl: prefs.agc, channelCount: 1};
+}
+function restartMic() {  // after picking another mic in settings
+  if (!micStream) return;
+  stopMic();
+  micFailed = false;
+  updateMic();
+}
+function restartCamera() { if (camStream) { stopCamera(); toggleCamera(); } }
+function applySink() {
+  outCtx?.setSinkId?.(prefs.spk || "").catch(() => {});
+  document.querySelectorAll("#sounds audio").forEach(a => a.setSinkId?.(prefs.spk || "").catch(() => {}));
+}
+function applyMicEnabled() { micStream?.getAudioTracks().forEach(t => t.enabled = !muted && !deaf); }
+
+function toggleMute() {
+  muted = !muted;
+  if (!muted && deaf) deaf = false;
+  sfx(muted ? "mute" : "unmute");
+  applyMicEnabled(); applyAudio(); sendState(); renderPanel(); renderSidebar();
+}
+function toggleDeaf() {
+  deaf = !deaf;
+  sfx(deaf ? "deafen" : "undeafen");
+  applyMicEnabled(); applyAudio(); sendState(); renderPanel(); renderSidebar();
+}
+function toggleHand() { me.hand = !me.hand; sendState(); renderPanel(); }
+
+/* ---------- camera ---------- */
+async function toggleCamera() {
+  if (camStream) return stopCamera();
+  if (!canSend()) return;
+  let s;
+  try {
+    s = await navigator.mediaDevices.getUserMedia({video: {
+      deviceId: prefs.cam ? {ideal: prefs.cam} : undefined,
+      width: {ideal: CAM.w}, height: {ideal: CAM.h}, frameRate: {ideal: CAM.fps, max: CAM.fps}}});
+  } catch (err) { return toast("Couldn't use your camera: " + err.message); }
+  if (!canSend()) return s.getTracks().forEach(t => t.stop());
+  camStream = s;
+  const t = s.getVideoTracks()[0];
+  t.contentHint = "motion";
+  t.addEventListener("ended", () => stopCamera());
+  syncMedia(); sendState(); renderPanel(); renderSidebar();
+}
+function stopCamera(notify = true) {
+  if (!camStream) return;
+  localVids.delete(camStream.id);
+  camStream.getTracks().forEach(t => t.stop());
+  camStream = null;
+  syncMedia();
+  if (notify) sendState();
+  renderPanel(); renderSidebar();
+}
+
+/* ---------- screen share ---------- */
+function shareLimits() {
+  const s = prefs.share || {}, r = RESOLUTIONS[s.res] || RESOLUTIONS["1080"];
+  const fps = [15, 30, 60].includes(+s.fps) ? +s.fps : 30;
+  const w = r.w || 2560, hgt = r.h || 1440;
+  // Bitrate grows with pixels and frame rate, clamped to something a home connection can carry.
+  const br = Math.round(Math.min(8e6, Math.max(300e3, w * hgt * fps * 0.08)));
+  return {w: r.w, h: r.h, fps, br, hint: s.hint === "detail" ? "detail" : "motion"};
+}
+function shareConstraints(q) {
+  const v = {frameRate: {max: q.fps}};
+  if (q.w) { v.width = {max: q.w}; v.height = {max: q.h}; }
+  return v;
+}
+// Must be called straight from a click (browsers only show the screen picker after one).
+async function startShare() {
+  if (!canSend()) return;
+  const q = shareLimits();
+  let s;
+  try {
+    s = await navigator.mediaDevices.getDisplayMedia({video: shareConstraints(q), audio: !!prefs.share?.audio});
+  } catch (err) {
+    if (err.name !== "NotAllowedError") toast("Couldn't share your screen: " + err.message);
+    return;
+  }
+  if (!canSend()) return s.getTracks().forEach(t => t.stop());
+  const old = screenStream;
+  screenStream = s;
+  if (old) { localVids.delete(old.id); old.getTracks().forEach(t => t.stop()); }
+  const v = s.getVideoTracks()[0];
+  v.contentHint = q.hint;
+  v.addEventListener("ended", () => { if (screenStream === s) stopShare(); });  // browser's own "Stop sharing" button
+  syncMedia(); sendState(); renderPanel(); renderSidebar();
+  if (!old) { sfx("streamStart"); toast("You're live! Everyone in the call can watch your screen."); }
+  callFocus = myId + ":screen";
+  openView({ch: voiceCh, kind: "call"});
+}
+function stopShare(notify = true) {
+  if (!screenStream) return;
+  localVids.delete(screenStream.id);
+  screenStream.getTracks().forEach(t => t.stop());
+  screenStream = null;
+  syncMedia();
+  if (notify) { sendState(); sfx("streamStop"); }
+  renderPanel(); renderSidebar();
+}
+function applyShareLimits() {
+  if (!screenStream) return;
+  const q = shareLimits(), v = screenStream.getVideoTracks()[0];
+  v.contentHint = q.hint;
+  v.applyConstraints(shareConstraints(q)).catch(() => {});
+  for (const p of pcs.values()) setEncoding(p.out.screen, {maxBitrate: q.br, maxFramerate: q.fps});
+}
+function setEncoding(out, enc) {
+  for (const s of out?.senders || []) {
+    if (s.track?.kind !== "video") continue;
+    const prm = s.getParameters();
+    if (!prm.encodings?.length) continue;
+    prm.encodings.forEach(e => Object.assign(e, enc));
+    s.setParameters(prm).catch(() => {});
+  }
+}
+
+/* ---------- WebRTC: direct, end-to-end encrypted browser-to-browser media ---------- */
+// Only people in the same voice/stage channel connect, and only once someone has something to send.
+function syncMedia() {
+  for (const id of [...pcs.keys()]) if (!sameCall(id)) closePeer(id);
+  for (const id of people.keys()) {
+    if (!sameCall(id)) continue;
+    const ok = canSend();
+    const want = {mic: ok ? micStream : null, cam: ok ? camStream : null, screen: ok ? screenStream : null};
+    let p = pcs.get(id);
+    if (!p && !want.mic && !want.cam && !want.screen) continue;
+    p = p || makePeer(id);
+    const q = shareLimits();
+    try {
+      setStream(p, "mic", want.mic);
+      setStream(p, "cam", want.cam, {maxBitrate: CAM.br, maxFramerate: CAM.fps});
+      setStream(p, "screen", want.screen, {maxBitrate: q.br, maxFramerate: q.fps});
+    } catch (err) { console.warn(err); }
+  }
+  applyAudio();
+}
+function setStream(p, key, stream, videoEnc) {
+  const cur = p.out[key];
+  if ((cur?.stream || null) === stream) return;
+  if (cur) { cur.senders.forEach(s => { try { p.pc.removeTrack(s); } catch {} }); delete p.out[key]; }
+  if (!stream) return;
+  const senders = [];
+  for (const t of stream.getTracks().sort((a, b) => (a.kind === "video" ? 0 : 1) - (b.kind === "video" ? 0 : 1))) {
+    const init = {direction: "sendonly", streams: [stream]};
+    if (t.kind === "video" && videoEnc) init.sendEncodings = [videoEnc];
+    const tr = p.pc.addTransceiver(t, init);
+    if (t.kind === "video") preferH264(tr);
+    senders.push(tr.sender);
+  }
+  p.out[key] = {stream, senders};
+}
+// H.264 can use the laptop's hardware video encoder, which is much lighter on the CPU.
+function preferH264(tr) {
+  try {
+    const caps = RTCRtpReceiver.getCapabilities?.("video");
+    if (!caps || !tr.setCodecPreferences) return;
+    const rank = c => /h264/i.test(c.mimeType) ? 0 : /vp8/i.test(c.mimeType) ? 1 : 2;
+    tr.setCodecPreferences([...caps.codecs].sort((a, b) => rank(a) - rank(b)));
+  } catch (err) { console.warn(err); }
+}
+
+function makePeer(id) {
+  const pc = new RTCPeerConnection(ICE);
+  // "Perfect negotiation": both sides may start; the polite one backs off on a clash.
+  const p = {id, pc, polite: myId < id, makingOffer: false, ignoreOffer: false, chain: Promise.resolve(), out: {}, warned: false};
+  pcs.set(id, p);
+  pc.onnegotiationneeded = async () => {
+    try {
+      p.makingOffer = true;
+      await pc.setLocalDescription();
+      relaySend(id, {type: "signal", data: {description: pc.localDescription}});
+    } catch (err) { console.warn(err); } finally { p.makingOffer = false; }
+  };
+  pc.onicecandidate = e => { if (e.candidate) relaySend(id, {type: "signal", data: {candidate: e.candidate}}); };
+  pc.ontrack = e => onRemoteTrack(id, e);
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === "failed") {
+      pc.restartIce();
+      if (!p.warned) { p.warned = true; toast(`Couldn't connect directly to ${people.get(id)?.name || "someone"}. Retrying… (strict networks can block this, see README)`); }
+    }
+    renderSidebar();
+  };
+  return p;
+}
+function onSignal(from, data) {
+  const p = pcs.get(from) || makePeer(from);
+  p.chain = p.chain.then(() => handleSignal(p, data)).catch(err => console.warn(err));
+}
+async function handleSignal(p, {description, candidate}) {
+  const pc = p.pc;
+  if (description) {
+    const clash = description.type === "offer" && (p.makingOffer || pc.signalingState !== "stable");
+    p.ignoreOffer = !p.polite && clash;
+    if (p.ignoreOffer) return;
+    await pc.setRemoteDescription(description);
+    if (description.type === "offer") {
+      await pc.setLocalDescription();
+      relaySend(p.id, {type: "signal", data: {description: pc.localDescription}});
+    }
+  } else if (candidate) {
+    try { await pc.addIceCandidate(candidate); } catch (err) { if (!p.ignoreOffer) throw err; }
+  }
+}
+function closePeer(id) {
+  const p = pcs.get(id);
+  if (!p) return;
+  p.pc.close();
+  pcs.delete(id);
+  for (const [tid, r] of [...remote]) if (r.peer === id) removeRemote(tid);
+}
+
+function onRemoteTrack(peerId, {track, streams}) {
+  if (remote.has(track.id)) return;
+  const stream = streams[0];
+  const kind = track.kind === "video" ? "video" : stream?.getVideoTracks().length ? "screen-audio" : "voice";
+  const r = {peer: peerId, kind, streamId: stream?.id};
+  if (track.kind === "audio") {
+    // The <audio> element keeps the stream flowing (Chrome needs it); the sound itself plays through a volume control.
+    r.el = h("audio", {autoplay: true, muted: true});
+    r.el.srcObject = new MediaStream([track]);
+    $("#sounds").append(r.el);
+    r.el.play().catch(() => {});
+    const ctx = outputCtx();
+    if (ctx) {
+      r.src = ctx.createMediaStreamSource(r.el.srcObject);
+      r.gain = ctx.createGain();
+      r.src.connect(r.gain).connect(ctx.destination);
+    } else if (prefs.spk) r.el.setSinkId?.(prefs.spk).catch(() => {});
+  } else {
+    r.el = h("video", {autoplay: true, playsInline: true, muted: true});
+    r.el.srcObject = new MediaStream([track]);
+  }
+  remote.set(track.id, r);
+  relabelTiles(); applyAudio();
+  stream?.addEventListener("removetrack", e => { if (e.track.id === track.id) removeRemote(track.id); });
+  track.addEventListener("ended", () => removeRemote(track.id));
+}
+function removeRemote(trackId) {
+  const r = remote.get(trackId);
+  if (!r) return;
+  r.el.srcObject = null;
+  r.src?.disconnect(); r.gain?.disconnect();
+  r.el.remove();
+  remote.delete(trackId);
+  updateStage();
+}
+// Voice is heard only by people in the same channel (on a stage, only from speakers).
+function canHear(r) {
+  if (deaf || !voiceCh) return false;
+  const st = stateOf(r.peer);
+  if (st.voice !== voiceCh) return false;
+  return !(r.kind === "voice" && isStage() && !st.speaker);
+}
+function applyAudio() {
+  for (const r of remote.values()) {
+    if (r.el.tagName !== "AUDIO") continue;
+    const key = volKey(people.get(r.peer));
+    const on = canHear(r) && !prefs.lmute[key];
+    const vol = Math.max(0, Math.min(2, prefs.vol[key] ?? 1)) * (prefs.outVol ?? 1);
+    if (r.gain) { r.el.muted = true; r.gain.gain.value = on ? vol : 0; if (on) outputCtx(); }
+    else { r.el.muted = !on; r.el.volume = Math.min(1, vol); }
+  }
+}
+
+function relabelTiles() { renderCallSoon(); }
+function updateStage() { renderCallSoon(); }
+
+/* ---------- end-to-end encryption check ---------- */
+// Both browsers hash the two encryption-key fingerprints. If anyone sat in the middle, the codes would differ.
+async function safetyCode(pc) {
+  const fp = sdp => (sdp?.match(/a=fingerprint:\S+ (\S+)/i) || [])[1];
+  const a = fp(pc.localDescription?.sdp), b = fp(pc.remoteDescription?.sdp);
+  if (!a || !b || pc.connectionState !== "connected") return null;
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode([a, b].sort().join("|"))));
+  const groups = [];
+  for (let i = 0; i < 5; i++) groups.push(String(((hash[2 * i] << 8) | hash[2 * i + 1]) % 10000).padStart(4, "0"));
+  return groups.join(" ");
+}
+async function showSafety() {
+  const rows = [];
+  for (const [id, p] of pcs) {
+    const code = await safetyCode(p.pc);
+    rows.push(h("li", {}, h("b", {}, people.get(id)?.name || "Someone"), h("div", {class: "code"}, code || "connecting…")));
+  }
+  $("#codes").replaceChildren(...(rows.length ? rows : [h("li", {class: "dim"}, "Nobody is connected to you in this channel yet.")]));
+  $("#e2ee").showModal();
+}
+
+/* ---------- speaking indicator (cheap: reads levels WebRTC already measures) ---------- */
+setInterval(async () => {
+  if (document.hidden || !voiceCh) return;
+  const speaking = new Set();
+  for (const [id, p] of pcs) {
+    for (const r of p.pc.getReceivers()) {
+      if (remote.get(r.track?.id)?.kind !== "voice") continue;
+      const src = r.getSynchronizationSources?.()[0];
+      if (src && src.audioLevel > 0.03) speaking.add(id);
+    }
+  }
+  const mic = [...pcs.values()].find(p => p.out.mic)?.out.mic.senders[0];
+  if (micProc) { if (micProc.open && micProc.level > -60 && !muted && !deaf) speaking.add(myId); }
+  else if (mic && !muted && !deaf) {
+    try { (await mic.getStats()).forEach(s => { if (s.type === "media-source" && s.audioLevel > 0.03) speaking.add(myId); }); } catch {}
+  }
+  document.querySelectorAll("[data-vid]").forEach(el => el.classList.toggle("speaking", !!el.dataset.vid && speaking.has(el.dataset.vid)));
+  $("#myAv")?.classList.toggle("speaking", speaking.has(myId));
+}, 300);
+
+/* ---------- icons (simple line drawings made for LiteCord) ---------- */
+const circ = (x, y, r) => `M${x - r} ${y}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0`;
+const MIC = "M9 5a3 3 0 0 1 6 0v6a3 3 0 0 1-6 0z M5 11a7 7 0 0 0 14 0 M12 18v3";
+const HEAD = "M4 16v-4a8 8 0 0 1 16 0v4 M4 15h3v6H5a1 1 0 0 1-1-1z M20 15h-3v6h2a1 1 0 0 0 1-1z";
+const CAMERA = "M3 7h12v10H3z M15 10l6-3v10l-6-3z";
+const PATHS = {
+  mic: MIC, micOff: MIC + " M3 3l18 18",
+  head: HEAD, headOff: HEAD + " M3 3l18 18",
+  camera: CAMERA, cameraOff: CAMERA + " M2 3l19 18",
+  gear: circ(12, 12, 3) + " M12 2v3 M12 19v3 M2 12h3 M19 12h3 M4.9 4.9l2.1 2.1 M17 17l2.1 2.1 M4.9 19.1l2.1-2.1 M17 7l2.1-2.1",
+  reply: "M9 14L4 9l5-5 M4 9h10a6 6 0 0 1 6 6v4",
+  smile: circ(12, 12, 9) + " M8 14c1 1.4 2.4 2 4 2s3-.6 4-2 M9 9.5h.01 M15 9.5h.01",
+  pencil: "M4 20h4L19 9l-4-4L4 16z M14 6l4 4",
+  pin: "M9 3h6l-1 6 4 4H6l4-4z M12 13v8",
+  search: circ(11, 11, 6) + " M16 16l5 5",
+  users: circ(9, 8, 3.5) + " M2 20c0-4 3-6 7-6s7 2 7 6 M16 4.5a3.5 3.5 0 0 1 0 7 M18 14c2.5.6 4 2.5 4 6",
+  plus: "M12 5v14 M5 12h14",
+  plusCircle: circ(12, 12, 9) + " M12 8v8 M8 12h8",
+  hash: "M5 9h14 M5 15h14 M10 4L8 20 M16 4l-2 16",
+  speaker: "M4 9h4l5-4v14l-5-4H4z M16.5 9a4 4 0 0 1 0 6 M19 6.5a7.5 7.5 0 0 1 0 11",
+  lock: "M6 11h12v10H6z M8 11V8a4 4 0 0 1 8 0v3",
+  hangup: "M3 14c5-4 13-4 18 0l-1.5 3-4-1.2V13c-2-.7-5-.7-7 0v2.8L4.5 17z",
+  screen: "M3 4h18v12H3z M8 20h8 M12 16v4",
+  share: "M3 4h18v12H3z M8 20h8 M12 16v4 M9 10l3-3 3 3 M12 7v6",
+  board: "M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M14 14h6v6h-6z",
+  signal: "M5 20v-3 M10 20v-7 M15 20V9 M20 20V5",
+  wave: "M3 10v4 M7 7v10 M11 4v16 M15 8v8 M19 10v4",
+  chevron: "M6 9l6 6 6-6",
+  chevronUp: "M6 15l6-6 6 6",
+  back: "M15 18l-6-6 6-6",
+  x: "M6 6l12 12 M18 6L6 18",
+  more: "M5 12h.01 M12 12h.01 M19 12h.01",
+  sync: "M4 12a8 8 0 0 1 14-5.3L20 9 M20 4v5h-5 M20 12a8 8 0 0 1-14 5.3L4 15 M4 20v-5h5",
+  fullscreen: "M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5",
+};
+function icon(name) {
+  const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg"), p = document.createElementNS(ns, "path");
+  svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("class", "ico"); svg.setAttribute("aria-hidden", "true");
+  p.setAttribute("d", PATHS[name] || "");
+  if (name === "more") p.setAttribute("stroke-width", "3");
+  svg.append(p);
+  return svg;
+}
+function hydrateIcons(root) { root.querySelectorAll("[data-icon]").forEach(el => el.prepend(icon(el.dataset.icon))); }
+
+/* ---------- sound effects and soundboard (LiteCord's own, synthesized live) ---------- */
+function tone(ctx, out, t, {f, f2 = f, dur = .12, type = "sine", vol = .2, attack = .005}) {
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(f, t);
+  if (f2 !== f) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + attack);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(out);
+  o.start(t); o.stop(t + dur + .02);
+}
+function noise(ctx, out, t, {dur = .2, vol = .2, freq = 1000, q = 1, type = "bandpass", attack = .003}) {
+  const len = Math.ceil(ctx.sampleRate * dur), buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+  s.buffer = buf; f.type = type; f.frequency.value = freq; f.Q.value = q;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + attack);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  s.connect(f).connect(g).connect(out);
+  s.start(t); s.stop(t + dur + .02);
+}
+const SFX = {
+  join: (c, o, t) => { tone(c, o, t, {f: 587, dur: .13, type: "triangle"}); tone(c, o, t + .1, {f: 880, dur: .24, type: "triangle"}); },
+  leave: (c, o, t) => { tone(c, o, t, {f: 880, dur: .13, type: "triangle"}); tone(c, o, t + .1, {f: 587, dur: .24, type: "triangle"}); },
+  userJoin: (c, o, t) => { tone(c, o, t, {f: 698, dur: .09, vol: .12}); tone(c, o, t + .08, {f: 1047, dur: .16, vol: .12}); },
+  userLeave: (c, o, t) => { tone(c, o, t, {f: 1047, dur: .09, vol: .12}); tone(c, o, t + .08, {f: 698, dur: .16, vol: .12}); },
+  mute: (c, o, t) => tone(c, o, t, {f: 560, f2: 300, dur: .13, vol: .15}),
+  unmute: (c, o, t) => tone(c, o, t, {f: 300, f2: 560, dur: .13, vol: .15}),
+  deafen: (c, o, t) => [440, 330, 247].forEach((f, i) => tone(c, o, t + i * .08, {f, dur: .1, vol: .13})),
+  undeafen: (c, o, t) => [247, 330, 440].forEach((f, i) => tone(c, o, t + i * .08, {f, dur: .1, vol: .13})),
+  message: (c, o, t) => { tone(c, o, t, {f: 988, dur: .08, vol: .12}); tone(c, o, t + .07, {f: 1319, dur: .18, vol: .12}); },
+  streamStart: (c, o, t) => { tone(c, o, t, {f: 392, f2: 784, dur: .25, type: "triangle", vol: .15}); tone(c, o, t + .22, {f: 1175, dur: .18, vol: .1}); },
+  streamStop: (c, o, t) => tone(c, o, t, {f: 784, f2: 392, dur: .3, type: "triangle", vol: .15}),
+};
+const SFX_LABELS = {message: "New message", join: "You join a call", leave: "You leave a call", userJoin: "Someone joins your call",
+                    userLeave: "Someone leaves your call", mute: "Mute and unmute", deafen: "Deafen and undeafen", streamStart: "A stream starts or stops"};
+function sfx(name) {
+  const key = {unmute: "mute", undeafen: "deafen", streamStop: "streamStart"}[name] || name;
+  if (prefs.sounds[key] === false) return;
+  if (name === "message" && myStatus() === "dnd") return;
+  const ctx = outputCtx();
+  if (!ctx) return;
+  const out = ctx.createGain();
+  out.gain.value = prefs.sfxVol ?? .6;
+  out.connect(ctx.destination);
+  try { SFX[name](ctx, out, ctx.currentTime + .01); } catch (err) { console.warn(err); }
+  setTimeout(() => out.disconnect(), 3000);
+}
+const BOARD = [
+  ["🎉", "Tada", (c, o, t) => [523, 659, 784, 1047].forEach((f, i) => tone(c, o, t + i * .07, {f, dur: .6 - i * .08, type: "triangle", vol: .18}))],
+  ["🥁", "Rimshot", (c, o, t) => {
+    noise(c, o, t, {dur: .12, freq: 180, type: "lowpass", vol: .5}); noise(c, o, t + .18, {dur: .1, freq: 2000, vol: .35});
+    noise(c, o, t + .42, {dur: .6, freq: 7000, type: "highpass", vol: .22}); tone(c, o, t + .42, {f: 180, f2: 120, dur: .15, vol: .3});
+  }],
+  ["😢", "Wah Wah", (c, o, t) => [392, 370, 349, 330].forEach((f, i) => tone(c, o, t + i * .35, {f, f2: i === 3 ? 290 : f * .98, dur: i === 3 ? .9 : .32, type: "sawtooth", vol: .08}))],
+  ["👏", "Applause", (c, o, t) => { for (let i = 0; i < 45; i++) noise(c, o, t + Math.random() * 1.5, {dur: .04, freq: 1500 + Math.random() * 1500, q: .7, vol: .22}); }],
+  ["🔔", "Ding", (c, o, t) => { tone(c, o, t, {f: 1319, dur: 1.2, vol: .18}); tone(c, o, t, {f: 2637, dur: .6, vol: .06}); tone(c, o, t, {f: 3951, dur: .3, vol: .03}); }],
+  ["⚡", "Zap", (c, o, t) => tone(c, o, t, {f: 1800, f2: 150, dur: .35, type: "square", vol: .06})],
+  ["🦗", "Crickets", (c, o, t) => { for (let k = 0; k < 3; k++) for (let i = 0; i < 4; i++) tone(c, o, t + k * .5 + i * .05, {f: 4400, dur: .035, vol: .06}); }],
+  ["🎈", "Pop", (c, o, t) => { noise(c, o, t, {dur: .06, freq: 900, q: .5, vol: .6}); tone(c, o, t, {f: 400, f2: 80, dur: .12, vol: .25}); }],
+  ["🎺", "Fanfare", (c, o, t) => [[523, .14], [523, .14], [523, .14], [659, .55]].reduce((at, [f, d]) => { tone(c, o, at, {f, dur: d, type: "sawtooth", vol: .07}); return at + d * .95; }, t)],
+  ["🌀", "Boing", (c, o, t) => { tone(c, o, t, {f: 150, f2: 600, dur: .35, vol: .2}); tone(c, o, t + .3, {f: 600, f2: 280, dur: .3, vol: .12}); }],
+  ["🚨", "Alarm", (c, o, t) => { for (let i = 0; i < 6; i++) tone(c, o, t + i * .18, {f: i % 2 ? 660 : 880, dur: .17, type: "square", vol: .05}); }],
+  ["🐸", "Ribbit", (c, o, t) => { tone(c, o, t, {f: 220, f2: 180, dur: .12, type: "sawtooth", vol: .08}); tone(c, o, t + .16, {f: 240, f2: 170, dur: .16, type: "sawtooth", vol: .08}); }],
+];
+function playBoard(i) {
+  const b = BOARD[i], ctx = outputCtx();
+  if (!b || !ctx) return;
+  const out = ctx.createGain();
+  out.gain.value = prefs.sbVol ?? .8;
+  out.connect(ctx.destination);
+  b[2](ctx, out, ctx.currentTime + .02);
+  setTimeout(() => out.disconnect(), 4000);
+}
+function soundboard(anchor) {
+  if (!voiceCh) return toast("Join a voice channel to use the soundboard.");
+  openPop(h("div", {class: "board"}, h("div", {class: "sub"}, "Soundboard"),
+    h("div", {class: "grid"}, ...BOARD.map(([em, name], i) => h("button", {title: `Play ${name} for everyone in the call`,
+      onclick: () => send({type: "sb", sound: i})}, h("b", {}, em), name))),
+    h("p", {class: "tiny"}, "Everyone in the call hears it (unless they're deafened).")), anchor);
+}
+function onBoard(m) {
+  if (m.ch !== voiceCh) return;
+  if (!deaf) playBoard(m.sound);
+  const b = BOARD[m.sound], call = document.querySelector("#view .call");
+  if (!b || !call) return;
+  const tag = h("div", {class: "sbfloat"}, `${b[0]} ${m.name} played ${b[1]}`);
+  call.append(tag);
+  setTimeout(() => tag.remove(), 2500);
+}
+
+/* ---------- statuses ---------- */
+const STATUS = {online: ["Online", "#23a55a"], idle: ["Idle", "#f0b232"], dnd: ["Do Not Disturb", "#da373c"], invisible: ["Invisible", "#80848e"]};
+let autoIdle = false, lastInput = Date.now();
+function myStatus() { const s = STATUS[prefs.status] ? prefs.status : "online"; return s === "online" && autoIdle ? "idle" : s; }
+function shownStatus(p) {
+  if (p.id === myId) return myStatus();
+  const s = STATUS[p.status] ? p.status : "online";
+  return s === "invisible" ? "offline" : s;
+}
+function setStatus(s) {
+  prefs.status = s; savePrefs();
+  send({type: "status", status: myStatus()});
+  renderUserBar(); renderSidebar();
+}
+for (const ev of ["mousemove", "keydown", "mousedown", "touchstart"])
+  addEventListener(ev, () => {
+    lastInput = Date.now();
+    if (autoIdle) { autoIdle = false; send({type: "status", status: myStatus()}); renderUserBar(); }
+  }, {passive: true});
+setInterval(() => {  // go idle after 10 minutes away, like Discord
+  if (!autoIdle && prefs.status === "online" && Date.now() - lastInput > 10 * 60e3 && room) {
+    autoIdle = true; send({type: "status", status: "idle"}); renderUserBar();
+  }
+}, 30000);
+function statusMenu(anchor) {
+  const r = anchor.getBoundingClientRect();
+  menu([
+    ...Object.entries(STATUS).map(([k, [label, color]]) => ({label, dot: color, radio: prefs.status === k,
+      hint: k === "dnd" ? "You won't get desktop notifications" : k === "invisible" ? "You'll look offline, but can still chat" : "",
+      fn: () => setStatus(k)})),
+    "-",
+    {label: "Edit Profile", fn: () => openSettings("account")},
+    {label: "Copy User ID", fn: () => copyText(myUid)},
+  ], r.left, r.top);
+}
+
+/* ---------- servers on the left (like Discord's server list) ---------- */
+function servers() {
+  try { const s = JSON.parse(localStorage.lcServers || "[]"); return Array.isArray(s) ? s.filter(x => typeof x === "string") : []; }
+  catch { return []; }
+}
+function rememberServer(name) {
+  const s = servers();
+  if (!s.includes(name)) localStorage.lcServers = JSON.stringify([...s, name].slice(-30));
+}
+function goServer(name) { localStorage.lcLast = name; location.href = "?room=" + encodeURIComponent(name); }
+function initials(s) {
+  const words = s.split(/[\s_\-.]+/).filter(Boolean);
+  return (words.length > 1 ? words.map(w => [...w][0]).join("") : [...s].slice(0, 2).join("")).slice(0, 3).toUpperCase();
+}
+function inviteLink(name) { return location.origin + "/?room=" + encodeURIComponent(name); }
+function copyText(t, done = "Copied!") {
+  navigator.clipboard?.writeText(t).then(() => toast(done, 2000)).catch(() => prompt("Copy this:", t));
+}
+function copyInvite(name = room) { copyText(inviteLink(name), "Invite link copied! Send it to your friends."); }
+function addServer() {
+  const name = prompt("Server name to create or join.\nAnyone who knows the name can join, so pick something hard to guess, like pizza-gang-7731:");
+  if (!name?.trim()) return;
+  rememberServer(name.trim().slice(0, 32));
+  goServer(name.trim().slice(0, 32));
+}
+async function leaveServer(name) {
+  if (!confirm(`Leave "${name}"? It's removed from your list and this device's saved copy of it is deleted.`)) return;
+  localStorage.lcServers = JSON.stringify(servers().filter(x => x !== name));
+  clearTimeout(saveTimer);
+  await idb("rooms", "readwrite", st => st.delete(name));
+  await idb("files", "readwrite", st => st.delete(IDBKeyRange.bound(name + "/", name + "/￿")));
+  if (name !== room) return renderRail();
+  saveTimer = -1;  // don't save this server again on the way out
+  const next = servers()[0];
+  if (next) goServer(next);
+  else { localStorage.removeItem("lcLast"); location.href = location.pathname; }
+}
+function renderRail() {
+  $("#rail").replaceChildren(
+    ...servers().map(s => h("button", {class: "srv" + (s === room ? " active" : ""), title: s,
+      onclick: () => { if (s !== room) goServer(s); },
+      oncontextmenu: e => { e.preventDefault(); serverMenu(s, e.clientX, e.clientY); }}, initials(s))),
+    h("div", {class: "railsep"}),
+    h("button", {class: "srv add", title: "Add a server", onclick: addServer}, icon("plus")));
+}
+const isMuted = id => !!prefs.muted[room] || !!prefs.muted[room + "/" + id];
+function serverMenu(name, x, y) {
+  const here = name === room;
+  menu([
+    here && {label: "Mark As Read", fn: () => { unread.clear(); mentionCount.clear(); renderSidebar(); }},
+    {label: "Invite People", fn: () => copyInvite(name)},
+    "-",
+    ...(here ? GROUPS.map(([kind, label]) => ({label: "Create " + label.replace(/s$/, "").replace(/ channel$/i, " Channel"), fn: () => createChannel(kind)})) : []),
+    "-",
+    {label: prefs.muted[name] ? "Unmute Server" : "Mute Server", fn: () => { prefs.muted[name] = !prefs.muted[name]; savePrefs(); renderSidebar(); }},
+    here && {label: "Hide Muted Channels", check: !!prefs.hideMuted[name], fn: () => { prefs.hideMuted[name] = !prefs.hideMuted[name]; savePrefs(); renderSidebar(); }},
+    "-",
+    {label: "User Settings", fn: () => openSettings()},
+    "-",
+    {label: "Leave Server", danger: true, fn: () => leaveServer(name)},
+  ], x, y);
+}
+
+/* ---------- channel list, members and profiles ---------- */
+function hue(s) { let n = 0; for (const c of String(s)) n = (n * 31 + c.charCodeAt(0)) % 360; return n; }
+function avatar(p, dot = false) {
+  const av = h("span", {class: "av", style: `background:hsl(${hue(p.uid || p.id)} 45% 40%)`}, ([...(p.name || "?")][0] || "?").toUpperCase());
+  if (!dot) return av;
+  const s = shownStatus(p);
+  return h("span", {class: "avw"}, av, h("span", {class: "sdot " + s, title: s === "offline" ? "Offline" : STATUS[s][0]}));
+}
+function everyone() { return [{id: myId, uid: myUid, name: myName, state: myState()}, ...people.values()]; }
+
+let lastChClick = {id: null, t: 0};
+function renderSidebar() {
+  const list = $("#channels");
+  list.replaceChildren();
+  for (const [kind, label] of GROUPS) {
+    list.append(h("div", {class: "cat"}, h("span", {}, label),
+      h("button", {class: "ib", title: "Create channel", onclick: () => createChannel(kind)}, icon("plus"))));
+    for (const c of channels.filter(c => c.kind === kind)) {
+      const isCall = kind === "voice" || kind === "stage", muted_ = isMuted(c.id);
+      const open = view && (view.ch === c.id || view.parent === c.id);
+      if (prefs.hideMuted[room] && muted_ && !open && voiceCh !== c.id) continue;
+      const n = mentionCount.get(c.id) || 0;
+      list.append(h("div", {class: "ch" + (open || voiceCh === c.id ? " active" : "") + (unread.get(c.id) && !muted_ ? " unread" : "") + (muted_ ? " muted" : ""),
+                            title: isCall ? (voiceCh === c.id ? "You're here. Click to open the call." : "Click to look · double-click to join") : "",
+                            onclick: () => {
+                              const now = Date.now(), dbl = lastChClick.id === c.id && now - lastChClick.t < 450;
+                              lastChClick = {id: c.id, t: now};
+                              if (isCall && dbl && voiceCh !== c.id) return joinVoice(c.id);
+                              openView({ch: c.id, kind: isCall ? "call" : kind});
+                            },
+                            oncontextmenu: e => { e.preventDefault(); channelMenu(c, e.clientX, e.clientY); }},
+        kind === "text" ? icon("hash") : kind === "voice" ? icon("speaker") : h("span", {}, ICONS[kind]),
+        h("span", {class: "cn"}, c.name),
+        n ? h("span", {class: "badge", title: "Mentions"}, n > 99 ? "99+" : n) : null,
+        h("button", {class: "ib gear", title: "Edit channel", onclick: e => {
+          e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); channelMenu(c, r.left, r.bottom + 4);
+        }}, icon("gear"))));
+      if (isCall) list.append(renderMembers(c));
+    }
+  }
+  renderMemberList();
+  renderCallSoon();
+}
+function channelMenu(c, x, y) {
+  const key = room + "/" + c.id, isCall = c.kind === "voice" || c.kind === "stage";
+  menu([
+    !isCall && {label: "Mark As Read", fn: () => { unread.delete(c.id); mentionCount.delete(c.id); renderSidebar(); }},
+    isCall && voiceCh !== c.id && {label: c.kind === "stage" ? "Join Stage" : "Join Voice", fn: () => joinVoice(c.id)},
+    isCall && {label: "Open Call", fn: () => openView({ch: c.id, kind: "call"})},
+    "-",
+    {label: "Invite People", fn: () => copyInvite()},
+    {label: "Copy Link", fn: () => copyText(inviteLink(room))},
+    "-",
+    !isCall && {label: prefs.muted[key] ? "Unmute Channel" : "Mute Channel", fn: () => { prefs.muted[key] = !prefs.muted[key]; savePrefs(); renderSidebar(); }},
+    "-",
+    {label: "Edit Channel", fn: () => renameChannel(c)},
+    {label: "Duplicate Channel", fn: () => send({type: "channel", action: "create", kind: c.kind, name: c.name})},
+    {label: "Create Text Channel", fn: () => createChannel("text")},
+    {label: "Create Voice Channel", fn: () => createChannel("voice")},
+    "-",
+    {label: "Delete Channel", danger: true, fn: () => deleteChannel(c)},
+  ], x, y);
+}
+
+function renderMembers(c) {
+  const stage = c.kind === "stage";
+  const amSpeaker = voiceCh === c.id && me.speaker;
+  const row = p => {
+    const st = p.state || {};
+    const broken = pcs.get(p.id)?.pc.connectionState === "failed";
+    const icons = [st.deaf ? "🔕" : st.muted ? "🔇" : "", st.cam ? "📷" : "", st.hand ? "✋" : "", broken ? "⚠️" : ""].join("");
+    const tip = [st.muted && "Muted", st.deaf && "Deafened", st.cam && "Camera on", st.hand && "Wants to speak", broken && "Couldn't connect directly"].filter(Boolean).join(", ");
+    let action = null;
+    if (stage && amSpeaker && p.id !== myId)
+      action = st.speaker
+        ? h("button", {class: "mini", title: "Move to audience", onclick: e => { e.stopPropagation(); send({type: "stage", action: "audience", target: p.id}); }}, "⬇")
+        : h("button", {class: "mini", title: "Invite to speak", onclick: e => { e.stopPropagation(); send({type: "stage", action: "invite", target: p.id}); }}, "⬆");
+    const live = st.screen ? h("span", {class: "live", title: "Watch stream", onclick: e => {
+      e.stopPropagation(); callFocus = p.id + ":screen"; openView({ch: c.id, kind: "call"});
+    }}, "LIVE") : null;
+    return h("div", {class: "mem", "data-vid": p.id, onclick: e => showProfile(p, e), oncontextmenu: e => { e.preventDefault(); userMenu(p, e.clientX, e.clientY); }},
+      avatar(p), h("span", {class: "nm"}, p.name), live, h("span", {class: "ic", title: tip}, icons), action);
+  };
+  const inside = everyone().filter(p => p.state?.voice === c.id);
+  const box = h("div", {class: "members"});
+  if (stage) {
+    const speakers = inside.filter(p => p.state.speaker), audience = inside.filter(p => !p.state.speaker);
+    speakers.forEach(p => box.append(row(p)));
+    if (audience.length) box.append(h("div", {class: "sub"}, `Audience — ${audience.length}`), ...audience.map(row));
+  } else inside.forEach(p => box.append(row(p)));
+  return box;
+}
+
+let membersOpen = localStorage.lcMembers !== "0";
+function renderMemberList() {
+  const el = $("#memberList");
+  el.hidden = !membersOpen || view?.kind === "call";
+  $("#membersBtn").classList.toggle("active", membersOpen);
+  if (!membersOpen) return;
+  const all = everyone();
+  const online = all.filter(p => shownStatus(p) !== "offline"), offline = all.filter(p => shownStatus(p) === "offline");
+  const row = p => h("div", {class: "mrow" + (shownStatus(p) === "offline" ? " offline" : ""), onclick: e => showProfile(p, e),
+                             oncontextmenu: e => { e.preventDefault(); userMenu(p, e.clientX, e.clientY); }},
+    avatar(p, true), h("span", {class: "nm"}, p.name + (p.id === myId ? " (you)" : "")),
+    p.state?.screen ? h("span", {class: "live"}, "LIVE") : p.state?.voice ? h("span", {class: "ic", title: "In a call"}, "🔊") : null,
+    p.id === leader ? h("span", {class: "ic", title: "Hosting: this server's chat lives in their browser right now"}, "🏠") : null);
+  el.replaceChildren(h("div", {class: "sub"}, `Online — ${online.length}`), ...online.map(row),
+    ...(offline.length ? [h("div", {class: "sub"}, `Offline — ${offline.length}`), ...offline.map(row)] : []));
+}
+
+function showProfile(p, e) {
+  if (!p) return;
+  const isMe = p.id === myId || (p.uid && p.uid === myUid), st = p.state || {};
+  const call = st.voice ? chById(st.voice) : null, s = p.offline ? "offline" : shownStatus(p);
+  const card = h("div", {class: "profile"},
+    h("div", {class: "pbanner", style: `background:hsl(${hue(p.uid || p.id)} 45% 30%)`}),
+    h("div", {class: "pav"}, p.offline ? avatar(p) : avatar(p, true)),
+    h("div", {class: "pname"}, p.name),
+    h("div", {class: "tiny"}, isMe ? `That's you · ${STATUS[myStatus()][0]}` : s === "offline" ? "Offline" : STATUS[s][0]),
+    p.id === leader ? h("div", {class: "tiny"}, "🏠 Hosting this server right now") : null,
+    call ? h("div", {class: "tiny"}, `In ${ICONS[call.kind]} ${call.name}${st.screen ? " · 🔴 Live" : ""}`) : null,
+    !isMe && !p.offline && isChatView() ? h("button", {class: "btn", onclick: () => { closePop(); insertAtCursor($("#text"), "@" + p.name + " "); }}, "Mention") : null,
+    !isMe && !p.offline ? volumeControls(p) : null,
+    isMe ? h("button", {class: "btn", onclick: () => { closePop(); openSettings("account"); }}, "Edit Profile") : null);
+  openPop(card, null, e.clientX, e.clientY);
+}
+const volKey = p => p?.uid || p?.name || "";
+function volSlider(p) {
+  const key = volKey(p);
+  const slider = h("input", {type: "range", min: 0, max: 200, value: Math.round((prefs.vol[key] ?? 1) * 100)});
+  const label = h("span", {class: "tiny"}, slider.value + "%");
+  slider.oninput = () => { prefs.vol[key] = slider.value / 100; label.textContent = slider.value + "%"; savePrefs(); applyAudio(); };
+  return h("div", {class: "vrow"}, slider, label);
+}
+function volumeControls(p) {
+  const key = volKey(p);
+  return h("div", {class: "field"}, h("label", {}, "User Volume"), volSlider(p),
+    h("label", {class: "chk"}, h("input", {type: "checkbox", checked: !!prefs.lmute[key],
+      onchange: e => { prefs.lmute[key] = e.target.checked; savePrefs(); applyAudio(); }}), "Mute for me"));
+}
+function userMenu(p, x, y) {
+  const isMe = p.id === myId, st = p.state || {}, key = volKey(p);
+  const inMyCall = !isMe && !!voiceCh && st.voice === voiceCh;
+  const stageCtl = !isMe && isStage() && st.voice === voiceCh && me.speaker;
+  menu([
+    {label: "Profile", fn: () => showProfile(p, {clientX: x, clientY: y})},
+    !isMe && isChatView() && {label: "Mention", fn: () => insertAtCursor($("#text"), "@" + p.name + " ")},
+    inMyCall && "-",
+    inMyCall && {el: h("div", {class: "mrowc"}, h("label", {}, "User Volume"), volSlider(p))},
+    inMyCall && {label: "Mute", check: !!prefs.lmute[key], fn: () => { prefs.lmute[key] = !prefs.lmute[key]; savePrefs(); applyAudio(); }},
+    inMyCall && st.cam && {label: "Disable Video", check: !!prefs.noVideo[key], fn: () => { prefs.noVideo[key] = !prefs.noVideo[key]; savePrefs(); renderCallSoon(); }},
+    inMyCall && st.screen && {label: "Watch Stream", fn: () => { callFocus = p.id + ":screen"; openView({ch: voiceCh, kind: "call"}); }},
+    stageCtl && (st.speaker ? {label: "Move to Audience", fn: () => send({type: "stage", action: "audience", target: p.id})}
+                            : {label: "Invite to Speak", fn: () => send({type: "stage", action: "invite", target: p.id})}),
+    isMe && "-",
+    isMe && {label: "Set Status", fn: () => statusMenu($("#meBtn"))},
+    isMe && {label: "Edit Profile", fn: () => openSettings("account")},
+    "-",
+    {label: "Copy Username", fn: () => copyText(p.name)},
+    p.uid && {label: "Copy User ID", fn: () => copyText(p.uid)},
+  ], x, y);
+}
+
+/* ---------- call view: click a voice channel to look, double-click (or Join Voice) to join ---------- */
+let callFocus = null, callRaf = 0, lastTileClick = {key: null, t: 0};
+const localVids = new Map();
+function renderCallSoon() {
+  if (view?.kind !== "call" || callRaf || document.fullscreenElement) return;
+  // A short timer instead of an animation frame, so the call still updates while the window is in the background.
+  callRaf = setTimeout(() => { callRaf = 0; if (view?.kind === "call" && !document.fullscreenElement) renderCall(); }, 30);
+}
+document.addEventListener("fullscreenchange", renderCallSoon);
+function localVideo(stream) {
+  if (!stream) return null;
+  let v = localVids.get(stream.id);
+  if (!v) { v = h("video", {autoplay: true, playsInline: true, muted: true}); v.srcObject = stream; localVids.set(stream.id, v); }
+  return v;
+}
+function videoFor(p, kind) {
+  if (kind === "user" && p.id !== myId && prefs.noVideo[volKey(p)]) return null;
+  const sid = p.state?.[kind === "screen" ? "screen" : "cam"];
+  if (!sid) return null;
+  if (p.id === myId) return localVideo(kind === "screen" ? screenStream : camStream);
+  for (const r of remote.values()) if (r.peer === p.id && r.kind === "video" && r.streamId === sid) return r.el;
+  return null;
+}
+function renderCall() {
+  const c = chById(view.ch);
+  if (!c) return;
+  $("#memberList").hidden = true;
+  const here = voiceCh === c.id, stage = c.kind === "stage";
+  $("#chTitle").replaceChildren(stage ? h("span", {}, "🎙️") : icon("speaker"), h("span", {class: "cn"}, c.name));
+  const inside = everyone().filter(p => p.state?.voice === c.id);
+  const onStage = stage ? inside.filter(p => p.state.speaker) : inside, audience = stage ? inside.filter(p => !p.state.speaker) : [];
+  const tiles = [];
+  for (const p of onStage) {
+    tiles.push({key: p.id + ":user", p, kind: "user"});
+    if (p.state.screen) tiles.push({key: p.id + ":screen", p, kind: "screen"});
+  }
+  if (callFocus && !tiles.some(t => t.key === callFocus)) callFocus = null;
+  let body;
+  if (!inside.length)
+    body = h("div", {class: "cempty"}, h("div", {}, h("h2", {}, c.name), h("p", {}, "No one's here yet. Join and invite your friends!")));
+  else if (callFocus) {
+    const big = tiles.find(t => t.key === callFocus);
+    body = h("div", {class: "cfocus"}, tileEl(big), h("div", {class: "cstrip"}, ...tiles.filter(t => t !== big).map(tileEl)));
+  } else body = tiles.length ? h("div", {class: "cgrid"}, ...tiles.map(tileEl))
+                             : h("div", {class: "cempty"}, h("p", {}, "Nobody's on stage yet."));
+  const parts = [body];
+  if (audience.length)
+    parts.push(h("div", {class: "caud"}, h("span", {}, `Audience — ${audience.length}`),
+      ...audience.map(p => h("span", {title: p.name + (p.state.hand ? " ✋ wants to speak" : ""), style: "cursor:pointer",
+        onclick: e => showProfile(p, e), oncontextmenu: e => { e.preventDefault(); userMenu(p, e.clientX, e.clientY); }}, avatar(p)))));
+  parts.push(callBar(c, here));
+  const floats = [...document.querySelectorAll("#view .call .sbfloat")];
+  $("#view").replaceChildren(h("div", {class: "call"}, ...parts, ...floats));
+  document.querySelectorAll("#view video").forEach(v => v.play?.().catch(() => {}));
+}
+function tileEl(t) {
+  const {p, kind} = t, st = p.state || {}, isMe = p.id === myId;
+  const v = videoFor(p, kind);
+  const el = h("div", {class: "ctile" + (kind === "screen" ? " screen" : ""), "data-vid": kind === "user" ? p.id : "",
+                       title: "Click to focus · double-click for fullscreen"});
+  el.onclick = () => {
+    const now = Date.now(), dbl = lastTileClick.key === t.key && now - lastTileClick.t < 400;
+    lastTileClick = {key: t.key, t: now};
+    if (dbl) {
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      else { callFocus = t.key; el.requestFullscreen?.().catch(() => {}); }
+      return;
+    }
+    if (document.fullscreenElement) return;
+    callFocus = callFocus === t.key ? null : t.key;
+    renderCall();
+  };
+  el.oncontextmenu = e => { e.preventDefault(); userMenu(p, e.clientX, e.clientY); };
+  if (v) {
+    v.classList.toggle("mirror", isMe && kind === "user");
+    el.append(v);
+  } else {
+    el.style.background = `hsl(${hue(p.uid || p.id)} 28% 22%)`;
+    el.append(avatar(p));
+    if (kind === "screen") el.append(h("div", {class: "cwait"}, isMe ? "Starting your stream…" : "Loading stream…"));
+  }
+  if (kind === "screen") el.append(h("div", {class: "ctop"}, h("span", {class: "live"}, "LIVE")));
+  el.append(h("div", {class: "clabel"}, h("span", {}, kind === "screen" ? (isMe ? "Your stream" : `${p.name}'s screen`) : p.name),
+    kind === "user" ? (st.deaf ? icon("headOff") : st.muted ? icon("micOff") : null) : null));
+  return el;
+}
+function callBar(c, here) {
+  if (!here) return h("div", {class: "cbar"}, h("button", {class: "cjoin", onclick: () => joinVoice(c.id)}, c.kind === "stage" ? "Join Stage" : "Join Voice"));
+  const ok = canSend(), micBad = muted || deaf;
+  const b = (ic, title, fn, cls = "", disabled = false) => h("button", {class: "cbtn " + cls, title, disabled, onclick: e => fn(e.currentTarget)}, icon(ic));
+  return h("div", {class: "cbar"},
+    h("div", {class: "cgrp"},
+      h("div", {class: "csplit" + (micBad ? " bad" : "")},
+        b(micBad ? "micOff" : "mic", muted ? "Unmute" : "Mute", toggleMute),
+        b("chevronUp", "Audio settings", audioMenu)),
+      h("div", {class: "csplit"},
+        b(camStream ? "camera" : "cameraOff", camStream ? "Turn Off Camera" : "Turn On Camera", toggleCamera, camStream ? "on" : "", !ok),
+        b("chevronUp", "Video settings", videoMenu))),
+    h("div", {class: "cgrp"},
+      b("share", screenStream ? "Stream options" : "Share Your Screen", shareClick, screenStream ? "on" : "", !ok || !canShare),
+      b("board", "Soundboard", soundboard),
+      b("more", "More", moreMenu)),
+    h("button", {class: "chang", title: "Disconnect", onclick: leaveVoice}, icon("hangup")));
+}
+async function deviceItems(kind, key, after) {
+  let list = [];
+  try { list = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === kind && d.deviceId && d.deviceId !== "default"); } catch {}
+  const pick = id => () => { prefs[key] = id; savePrefs(); after(); };
+  return [{label: "Default", radio: !prefs[key], fn: pick("")},
+          ...list.map((d, i) => ({label: d.label || `Device ${i + 1}`, radio: prefs[key] === d.deviceId, fn: pick(d.deviceId)}))];
+}
+async function audioMenu(anchor) {
+  const r = anchor.getBoundingClientRect();
+  const ins = await deviceItems("audioinput", "mic", restartMic), outs = await deviceItems("audiooutput", "spk", applySink);
+  const inVol = h("input", {type: "range", min: 0, max: 200, value: Math.round(prefs.inVol * 100)});
+  inVol.oninput = () => { prefs.inVol = inVol.value / 100; savePrefs(); setInputVolume(); };
+  menu([
+    {el: h("div", {class: "sub"}, "Input Device")}, ...ins,
+    "-",
+    {el: h("div", {class: "sub"}, "Output Device")}, ...outs,
+    "-",
+    {el: h("div", {class: "mrowc"}, h("label", {}, "Input Volume"), h("div", {class: "vrow"}, inVol))},
+    {label: "AI Noise Suppression", check: !!NOISE[prefs.nsMode], fn: toggleNoise},
+    {label: "Voice Settings", fn: () => openSettings("voice")},
+  ], r.left, r.top);
+}
+async function videoMenu(anchor) {
+  const r = anchor.getBoundingClientRect();
+  menu([{el: h("div", {class: "sub"}, "Camera")}, ...await deviceItems("videoinput", "cam", restartCamera), "-",
+        {label: "Video Settings", fn: () => openSettings("voice")}], r.left, r.top);
+}
+function moreMenu(anchor) {
+  const r = anchor.getBoundingClientRect(), stage = isStage();
+  menu([
+    stage && !me.speaker && {label: me.hand ? "Lower Hand" : "Raise Hand", fn: toggleHand},
+    stage && me.speaker && {label: "Move to Audience", fn: () => send({type: "stage", action: "audience", target: myId})},
+    voiceCh && {label: "Open Call", fn: () => openView({ch: voiceCh, kind: "call"})},
+    {label: "Full Screen", fn: () => document.querySelector("#view .call")?.requestFullscreen?.().catch(() => {})},
+    {label: "Voice Encryption (safety codes)", fn: showSafety},
+    "-",
+    {label: "Voice Settings", fn: () => openSettings("voice")},
+    {label: "Disconnect", danger: true, fn: leaveVoice},
+  ], r.left, r.top);
+}
+function toggleNoise() {
+  if (NOISE[prefs.nsMode]) { prefs.lastAi = prefs.nsMode; prefs.nsMode = "off"; }
+  else prefs.nsMode = NOISE[prefs.lastAi] ? prefs.lastAi : "rnnoise";
+  savePrefs(); restartMic(); renderPanel();
+  toast(NOISE[prefs.nsMode] ? "AI noise suppression on." : "AI noise suppression off.", 2500);
+}
+
+/* ---------- screen share ("Go Live") ---------- */
+function shareClick(anchor) {
+  if (!screenStream) return openShareDialog();
+  const r = anchor.getBoundingClientRect();
+  menu([
+    {label: "Watch My Stream", fn: () => { callFocus = myId + ":screen"; openView({ch: voiceCh, kind: "call"}); }},
+    {label: "Stream Quality", fn: () => openShareDialog()},
+    {label: "Change Window", fn: () => startShare(true)},
+    "-",
+    {label: "Stop Streaming", danger: true, fn: () => stopShare()},
+  ], r.left, r.top);
+}
+function openShareDialog() {
+  if (!voiceCh) return toast("Join a voice channel first.");
+  if (!canShare) return toast("This browser can't share its screen. Try Chrome, Edge, Brave or Firefox on a computer.");
+  const d = $("#shareDlg"), s = {...prefs.share}, live = !!screenStream;
+  const seg = (name, list) => h("div", {class: "seg"}, ...list.map(([v, label]) => h("button", {type: "button", class: "segb" + (String(s[name]) === String(v) ? " sel" : ""),
+    onclick: e => { s[name] = v; [...e.currentTarget.parentNode.children].forEach(x => x.classList.toggle("sel", x === e.currentTarget)); }}, label)));
+  const audio = h("input", {type: "checkbox", checked: !!s.audio, onchange: e => { s.audio = e.target.checked; }});
+  d.replaceChildren(
+    h("h2", {}, live ? "Stream Quality" : "Share Your Screen"),
+    h("p", {}, live ? "Change how your stream looks. Friends see the change right away." : "Pick a quality, click Go Live, then choose a screen, window or tab."),
+    h("div", {class: "field"}, h("label", {}, "Resolution"), seg("res", [["720", "720p"], ["1080", "1080p"], ["1440", "1440p"], ["max", "Source"]])),
+    h("div", {class: "field"}, h("label", {}, "Frame Rate"), seg("fps", [[15, "15 FPS"], [30, "30 FPS"], [60, "60 FPS"]])),
+    h("div", {class: "field"}, h("label", {}, "Optimize For"), seg("hint", [["motion", "Smoothness (games, video)"], ["detail", "Clarity (text, code)"]])),
+    live ? null : h("label", {class: "chk"}, audio, "Share sound too (works for tabs, and whole screens on Windows)"),
+    h("p", {class: "tiny"}, "Higher settings look better but need a faster computer and internet, for you and for your friends."),
+    h("div", {class: "dlgbtns"}, h("button", {class: "btn", onclick: () => d.close()}, "Cancel"),
+      h("button", {class: "btn primary", onclick: () => {
+        prefs.share = s; savePrefs(); d.close();
+        if (live) applyShareLimits(); else startShare();
+      }}, live ? "Apply" : "Go Live")));
+  d.showModal();
+}
+
+/* ---------- voice panel and user bar ---------- */
+function renderPanel() {
+  renderUserBar();
+  $("#voicePanel").hidden = !voiceCh;
+  renderCallSoon();
+  if (!voiceCh) return;
+  const c = chById(voiceCh), stage = isStage(), ok = canSend();
+  const bad = [...pcs.values()].some(p => p.pc.connectionState === "failed");
+  $("#vpSignal").classList.toggle("bad", bad);
+  $("#vpSignal").title = bad ? "Couldn't connect directly to someone in the call" : "Voice connected";
+  $("#vpState").textContent = bad ? "Connection Problem" : stage ? (me.speaker ? "On Stage" : "In the Audience") : "Voice Connected";
+  $("#vpName").textContent = `${c?.name || ""} / ${room}`;
+  const ai = !!NOISE[prefs.nsMode], nsb = $("#nsBtn");
+  nsb.replaceChildren(icon("wave"));
+  nsb.classList.toggle("on-green", ai);
+  nsb.title = ai ? "AI noise suppression is on. Click to turn it off." : "AI noise suppression is off. Click to turn it on.";
+  vb("#camBtn", camStream ? "camera" : "cameraOff", camStream ? "Turn Off Camera" : "Turn On Camera", !!camStream, !ok);
+  vb("#shareBtn", "share", screenStream ? "Stream options" : "Share Your Screen", !!screenStream, !ok || !canShare);
+  $("#stageRow").hidden = !stage;
+  $("#handBtn").hidden = me.speaker;
+  $("#handBtn").textContent = me.hand ? "✋ Lower hand" : "✋ Raise hand";
+  $("#handBtn").className = "btn" + (me.hand ? " on" : "");
+  $("#audBtn").hidden = !me.speaker;
+}
+function vb(sel, ic, title, on, disabled) {
+  const b = $(sel);
+  b.replaceChildren(icon(ic));
+  b.title = title;
+  b.classList.toggle("on", on);
+  b.disabled = disabled;
+}
+function renderUserBar() {
+  $("#myAv").replaceChildren(avatar({id: myId, uid: myUid, name: myName}, true));
+  const m = $("#muteBtn"), d = $("#deafBtn");
+  m.replaceChildren(icon(muted || deaf ? "micOff" : "mic"));
+  m.classList.toggle("off", muted || deaf);
+  m.title = muted ? "Unmute (Ctrl+Shift+M)" : "Mute (Ctrl+Shift+M)";
+  d.replaceChildren(icon(deaf ? "headOff" : "head"));
+  d.classList.toggle("off", deaf);
+  d.title = deaf ? "Undeafen (Ctrl+Shift+D)" : "Deafen (Ctrl+Shift+D)";
+}
+
+/* ---------- user settings ---------- */
+function savePrefs() { localStorage.lcPrefs = JSON.stringify(prefs); }
+const lightMQ = matchMedia("(prefers-color-scheme: light)");
+lightMQ.addEventListener?.("change", () => { if (prefs.theme === "sync") applyLook(); });
+function applyLook() {
+  const t = prefs.theme === "sync" ? (lightMQ.matches ? "light" : "dark") : ["light", "ash", "dark", "onyx"].includes(prefs.theme) ? prefs.theme : "dark";
+  const root = document.documentElement;
+  root.dataset.theme = t;
+  root.classList.toggle("reduce", !!prefs.reduce);
+  root.style.setProperty("--fs", (prefs.fs || 15) + "px");
+  root.style.setProperty("--gap", (prefs.gap ?? 14) + "px");
+  document.body.classList.toggle("compact", !!prefs.compact);
+  document.body.style.zoom = prefs.zoom && prefs.zoom !== 1 ? String(prefs.zoom) : "";
+  const meta = document.querySelector("meta[name=theme-color]");
+  if (meta) meta.content = getComputedStyle(root).getPropertyValue("--rail").trim() || "#121214";
+}
+function changeName(n) {
+  n = oneLine(n).slice(0, 32);
+  if (!n || n === myName) return;
+  myName = n;
+  localStorage.lcName = n;
+  $("#myName").textContent = n;
+  send({type: "rename", name: n});
+  renderUserBar(); renderSidebar();
+}
+const SETTINGS = [["account", "My Account"], ["voice", "Voice & Video"], ["notify", "Notifications"], ["look", "Appearance"]];
+function stopMicTest() { micTest?.stop(); micTest = null; }
+function openSettings(tab = "account") {
+  const d = $("#settings");
+  stopMicTest();
+  $("#setNav").replaceChildren(h("div", {class: "sub"}, "User Settings"),
+    ...SETTINGS.map(([k, label]) => h("button", {class: "mi" + (k === tab ? " sel" : ""), onclick: () => openSettings(k)}, label)),
+    h("div", {class: "msep"}), h("button", {class: "mi", onclick: () => d.close()}, "Close (Esc)"));
+  $("#setBody").replaceChildren(...settingsPage(tab));
+  if (!d.open) d.showModal();
+}
+$("#settings").addEventListener("close", stopMicTest);
+function radio(name, value, current, label, onpick) {
+  return h("label", {class: "chk"}, h("input", {type: "radio", name, value, checked: value === current, onchange: () => onpick(value)}), label);
+}
+function check(label, on, onchange) {
+  return h("label", {class: "chk"}, h("input", {type: "checkbox", checked: !!on, onchange: e => onchange(e.target.checked)}), label);
+}
+function toggleRow(title, desc, on, onchange) {
+  return h("label", {class: "toggle"}, h("div", {}, h("b", {}, title), desc ? h("span", {}, desc) : null),
+    h("input", {type: "checkbox", class: "sw", checked: !!on, onchange: e => onchange(e.target.checked)}));
+}
+function slider(min, max, step, value, fmt, oninput) {
+  const s = h("input", {type: "range", min, max, step, value}), l = h("span", {class: "tiny"}, fmt(value));
+  s.oninput = () => { l.textContent = fmt(+s.value); oninput(+s.value); };
+  return h("div", {class: "vrow"}, s, l);
+}
+function settingsPage(tab) {
+  if (tab === "account") {
+    const name = h("input", {value: myName, maxLength: 32});
+    return [h("h2", {}, "My Account"),
+      h("div", {class: "field"}, h("label", {}, "Display Name"), name,
+        h("button", {class: "btn primary", onclick: () => { changeName(name.value); toast("Name saved."); }}, "Save")),
+      h("div", {class: "field"}, h("label", {}, "Status"),
+        ...Object.entries(STATUS).map(([k, [label]]) => radio("status", k, prefs.status || "online", label, setStatus))),
+      h("p", {class: "tiny"}, "There are no accounts or passwords: your name and settings are saved in this browser."),
+      h("div", {class: "field"}, h("label", {}, "Saved Chats"),
+        h("p", {class: "tiny"}, "Each device keeps a copy of your servers' chats so they survive when everyone goes offline."),
+        h("button", {class: "btn danger", onclick: async () => {
+          if (!confirm("Delete every saved chat and file on this device? Your servers stay in other people's copies.")) return;
+          clearTimeout(saveTimer); saveTimer = -1;
+          await idb("rooms", "readwrite", st => st.clear());
+          await idb("files", "readwrite", st => st.clear());
+          toast("Deleted. Reloading…"); setTimeout(() => location.reload(), 800);
+        }}, "Delete saved chats on this device"))];
+  }
+  if (tab === "voice") {
+    const devSelect = (kind, key, label, after) => {
+      const sel = h("select", {onchange: () => { prefs[key] = sel.value; savePrefs(); after(); }});
+      sel.add(new Option("Default", ""));
+      navigator.mediaDevices?.enumerateDevices().then(list => {
+        list.filter(d => d.kind === kind && d.deviceId && d.deviceId !== "default")
+          .forEach((d, i) => sel.add(new Option(d.label || `${label} ${i + 1}`, d.deviceId)));
+        sel.value = [...sel.options].some(o => o.value === prefs[key]) ? prefs[key] : "";
+      }).catch(() => {});
+      return h("div", {class: "field"}, h("label", {}, label), sel);
+    };
+    const pct = (key, label, after) => {
+      const s = h("input", {type: "range", min: 0, max: 200, value: Math.round((prefs[key] ?? 1) * 100)});
+      const l = h("span", {class: "tiny"}, s.value + "%");
+      s.oninput = () => { prefs[key] = s.value / 100; l.textContent = s.value + "%"; savePrefs(); after(); };
+      return h("div", {class: "field"}, h("label", {}, label), h("div", {class: "vrow"}, s, l));
+    };
+    const remakeMic = () => { restartMic(); if (micTest) { stopMicTest(); startTest(); } };
+
+    // Live level meter with the sensitivity marker, like Discord's.
+    const bar = h("div", {class: "lvl"}), mark = h("div", {class: "thr"});
+    const meter = h("div", {class: "meter big", title: "Your voice level. It turns green when your voice is being sent."}, bar, mark);
+    const pos = db => Math.max(0, Math.min(100, (db + 80) / 80 * 100)) + "%";
+    const draw = () => {
+      if (!meter.isConnected) return;
+      const m = micTest || micProc;
+      bar.style.width = m ? pos(m.level) : "0";
+      bar.classList.toggle("open", !!m?.open);
+      mark.hidden = prefs.inputMode === "ptt" || !m;
+      if (m) mark.style.left = pos(prefs.autoSens ? m.threshold : prefs.sens);
+      requestAnimationFrame(draw);
+    };
+    requestAnimationFrame(draw);
+    const hear = h("input", {type: "checkbox", checked: true});
+    const testBtn = h("button", {class: "btn"}, "Let's Check");
+    const startTest = async () => {
+      try {
+        const raw = await navigator.mediaDevices.getUserMedia({audio: micConstraints()});
+        micTest = await buildMic(raw, {loopback: hear.checked});
+        testBtn.textContent = "Stop Testing";
+      } catch (err) { toast("Couldn't use your microphone: " + err.message); }
+    };
+    testBtn.onclick = () => { if (micTest) { stopMicTest(); testBtn.textContent = "Let's Check"; } else startTest(); };
+    hear.onchange = () => { if (micTest) { stopMicTest(); startTest(); } };
+
+    const sens = h("input", {type: "range", min: -80, max: 0, value: prefs.sens, disabled: !!prefs.autoSens});
+    const sensLabel = h("span", {class: "tiny"}, prefs.sens + " dB");
+    sens.oninput = () => { prefs.sens = +sens.value; sensLabel.textContent = sens.value + " dB"; savePrefs(); updateGates(); };
+    const keyBtn = h("button", {class: "btn keybtn"}, keyName(prefs.pttKey));
+    keyBtn.onclick = () => {
+      keyBtn.textContent = "Press a key or side mouse button…";
+      const done = code => {
+        removeEventListener("keydown", onKey, true); removeEventListener("mousedown", onMouse, true);
+        recordingKey = null;
+        if (code) { prefs.pttKey = code; savePrefs(); }
+        keyBtn.textContent = keyName(prefs.pttKey);
+      };
+      const onKey = e => { e.preventDefault(); e.stopPropagation(); done(e.code === "Escape" ? null : e.code); };
+      const onMouse = e => { if (e.button >= 3) { e.preventDefault(); done("Mouse" + (e.button + 1)); } };
+      recordingKey = done;
+      addEventListener("keydown", onKey, true); addEventListener("mousedown", onMouse, true);
+    };
+    const delay = h("input", {type: "range", min: 0, max: 2000, step: 20, value: prefs.pttDelay});
+    const delayLabel = h("span", {class: "tiny"}, prefs.pttDelay + " ms");
+    delay.oninput = () => { prefs.pttDelay = +delay.value; delayLabel.textContent = delay.value + " ms"; savePrefs(); };
+    const vadBox = h("div", {hidden: prefs.inputMode === "ptt"},
+      h("div", {class: "field"}, h("label", {}, "Input Sensitivity"),
+        check("Automatically determine input sensitivity", prefs.autoSens, v => { prefs.autoSens = v; sens.disabled = v; savePrefs(); updateGates(); }),
+        h("div", {class: "vrow"}, sens, sensLabel)));
+    const pttBox = h("div", {hidden: prefs.inputMode !== "ptt"},
+      h("div", {class: "cols"},
+        h("div", {class: "field"}, h("label", {}, "Shortcut"), keyBtn),
+        h("div", {class: "field"}, h("label", {}, "Push to Talk Release Delay"), h("div", {class: "vrow"}, delay, delayLabel))),
+      h("p", {class: "tiny"}, "Browsers only see key presses while LiteCord's window is focused, so push-to-talk won't work while you're clicked into a game. Voice Activity works everywhere."));
+    const mode = v => { prefs.inputMode = v; savePrefs(); vadBox.hidden = v === "ptt"; pttBox.hidden = v !== "ptt"; updateGates(); };
+    const ns = v => { prefs.nsMode = v; savePrefs(); remakeMic(); renderPanel(); };
+    const canPickSpeaker = "setSinkId" in HTMLMediaElement.prototype || "setSinkId" in AudioContext.prototype;
+    return [h("h2", {}, "Voice & Video"),
+      h("div", {class: "cols"},
+        devSelect("audioinput", "mic", "Input Device", remakeMic),
+        canPickSpeaker ? devSelect("audiooutput", "spk", "Output Device", applySink) : h("p", {class: "tiny"}, "This browser can't pick a speaker. It uses your system's default."),
+        pct("inVol", "Input Volume", setInputVolume),
+        pct("outVol", "Output Volume", applyAudio)),
+      h("div", {class: "field"}, h("label", {}, "Mic Test"),
+        h("p", {class: "tiny"}, "Having mic issues? Start a test and say something. You'll hear yourself the way your friends do, with noise suppression."),
+        h("div", {class: "vrow"}, testBtn, h("label", {class: "chk"}, hear, "Play my voice back to me")), meter),
+      h("div", {class: "field"}, h("label", {}, "Input Mode"),
+        radio("imode", "vad", prefs.inputMode, "Voice Activity", mode),
+        radio("imode", "ptt", prefs.inputMode, "Push to Talk", mode)),
+      vadBox, pttBox,
+      h("div", {class: "field"}, h("label", {}, "Noise Suppression"),
+        radio("nsm", "rnnoise", prefs.nsMode, "AI noise suppression (RNNoise): removes keyboards, fans, dogs and background talk. Recommended.", ns),
+        radio("nsm", "gtcrn", prefs.nsMode, "Stronger AI noise suppression (GTCRN): cleans up more, uses more CPU.", ns),
+        radio("nsm", "browser", prefs.nsMode, "Standard: the browser's built-in noise filter.", ns),
+        radio("nsm", "off", prefs.nsMode, "None", ns)),
+      h("div", {class: "field"}, h("label", {}, "Voice Processing"),
+        check("Echo cancellation", prefs.ec, v => { prefs.ec = v; savePrefs(); remakeMic(); }),
+        check("Automatic gain control", prefs.agc, v => { prefs.agc = v; savePrefs(); remakeMic(); })),
+      devSelect("videoinput", "cam", "Camera", restartCamera),
+      h("p", {class: "tiny"}, "Device names show up after you've allowed the microphone or camera once. Screen share quality is picked when you click Share Your Screen. Shortcuts: Ctrl+Shift+M mute, Ctrl+Shift+D deafen.")];
+  }
+  if (tab === "notify") {
+    const perm = "Notification" in window ? Notification.permission : "unsupported";
+    const pick = v => {
+      prefs.notify = v; savePrefs();
+      if (v !== "off" && perm === "default") Notification.requestPermission().then(() => openSettings("notify"));
+    };
+    return [h("h2", {}, "Notifications"),
+      h("div", {class: "field"}, h("label", {}, "Desktop Notifications"),
+        radio("notify", "all", prefs.notify, "All messages", pick),
+        radio("notify", "mentions", prefs.notify, "Only @mentions and replies to me", pick),
+        radio("notify", "off", prefs.notify, "Nothing", pick),
+        h("p", {class: "tiny"}, perm === "denied" ? "Your browser is blocking notifications for this site. Allow them in the browser's site settings."
+          : perm === "unsupported" ? "This browser doesn't support desktop notifications." : perm === "granted" ? "Desktop notifications are allowed."
+          : "Pick an option and your browser will ask to allow notifications. Do Not Disturb status turns them off.")),
+      h("h3", {}, "Sounds"),
+      ...Object.entries(SFX_LABELS).map(([k, label]) => toggleRow(label, "", prefs.sounds[k] !== false, v => {
+        prefs.sounds[k] = v; savePrefs(); if (v) sfx(k);
+      })),
+      h("div", {class: "field"}, h("label", {}, "Sound Effects Volume"), slider(0, 100, 5, Math.round((prefs.sfxVol ?? .6) * 100), v => v + "%", v => { prefs.sfxVol = v / 100; savePrefs(); })),
+      h("div", {class: "field"}, h("label", {}, "Soundboard Volume"), slider(0, 100, 5, Math.round((prefs.sbVol ?? .8) * 100), v => v + "%", v => { prefs.sbVol = v / 100; savePrefs(); })),
+      h("button", {class: "btn", onclick: () => playBoard(0)}, "Test Soundboard")];
+  }
+  const swatch = (k, label, bg) => h("button", {class: "tsw" + (prefs.theme === k ? " sel" : ""), title: label, style: `background:${bg}`,
+    onclick: () => { prefs.theme = k; savePrefs(); applyLook(); openSettings("look"); }}, k === "sync" ? icon("sync") : null);
+  return [h("h2", {}, "Appearance"),
+    h("h3", {}, "Theme"),
+    toggleRow("Same as Device Theme", "Match your device's light or dark mode.", prefs.theme === "sync", v => {
+      prefs.theme = v ? "sync" : lightMQ.matches ? "light" : "dark"; savePrefs(); applyLook(); openSettings("look");
+    }),
+    h("div", {class: "sub"}, "Default Themes"),
+    h("div", {class: "themes"}, swatch("light", "Light", "#ffffff"), swatch("ash", "Ash", "#313338"), swatch("dark", "Dark", "#1d1e21"),
+      swatch("onyx", "Onyx", "#000000"), swatch("sync", "Sync with device", "transparent")),
+    h("h3", {}, "Message Display"),
+    radio("look", "cozy", prefs.compact ? "compact" : "cozy", "Cozy: modern, beautiful, and easy on your eyes.", () => { prefs.compact = false; savePrefs(); applyLook(); }),
+    radio("look", "compact", prefs.compact ? "compact" : "cozy", "Compact: fit more messages on screen at one time.", () => { prefs.compact = true; savePrefs(); applyLook(); }),
+    h("h3", {}, "Chat Font Scaling"),
+    slider(12, 24, 1, prefs.fs || 15, v => v + "px", v => { prefs.fs = v; savePrefs(); applyLook(); }),
+    h("h3", {}, "Space Between Message Groups"),
+    slider(0, 24, 2, prefs.gap ?? 14, v => v + "px", v => { prefs.gap = v; savePrefs(); applyLook(); }),
+    h("h3", {}, "Zoom Level"),
+    slider(50, 200, 10, Math.round((prefs.zoom || 1) * 100), v => v + "%", v => { prefs.zoom = v / 100; savePrefs(); applyLook(); }),
+    h("h3", {}, "Accessibility"),
+    toggleRow("Reduced Motion", "Turn off animations and smooth scrolling.", prefs.reduce, v => { prefs.reduce = v; savePrefs(); applyLook(); })];
+}
+
+/* ---------- small helpers ---------- */
+function fmtTime(ts) {
+  const d = new Date(ts), t = d.toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
+  return d.toDateString() === new Date().toDateString() ? "Today at " + t : d.toLocaleDateString() + " " + t;
+}
+function fmtClock(ts) { return new Date(ts).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"}); }
+function toast(text, ms = 6000) {
+  const t = h("div", {class: "toast"}, text);
+  $("#toasts").append(t);
+  setTimeout(() => t.remove(), ms);
+}
+function status(text) { $("#status").textContent = text; }
+
+$("#leaveBtn").onclick = leaveVoice;
+$("#muteBtn").onclick = toggleMute;
+$("#deafBtn").onclick = toggleDeaf;
+$("#setBtn").onclick = () => openSettings();
+$("#meBtn").onclick = e => statusMenu(e.currentTarget);
+$("#camBtn").onclick = toggleCamera;
+$("#shareBtn").onclick = e => shareClick(e.currentTarget);
+$("#sbBtn").onclick = e => soundboard(e.currentTarget);
+$("#vpMore").onclick = e => moreMenu(e.currentTarget);
+$("#vpName").onclick = () => { if (voiceCh) openView({ch: voiceCh, kind: "call"}); };
+$("#nsBtn").onclick = toggleNoise;
+$("#handBtn").onclick = toggleHand;
+$("#audBtn").onclick = () => send({type: "stage", action: "audience", target: myId});
+$("#roomBar").onclick = e => { const r = e.currentTarget.getBoundingClientRect(); serverMenu(room, r.left + 8, r.bottom); };
+$("#pinsBtn").onclick = showPins;
+$("#membersBtn").onclick = () => { membersOpen = !membersOpen; localStorage.lcMembers = membersOpen ? "1" : "0"; renderMemberList(); };
+$("#search").onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); runSearch(e.target.value); } };
+addEventListener("keydown", e => {  // Ctrl+Shift+M = mute, Ctrl+Shift+D = deafen
+  if (!e.ctrlKey || !e.shiftKey) return;
+  if (e.key.toLowerCase() === "m") { e.preventDefault(); toggleMute(); }
+  if (e.key.toLowerCase() === "d") { e.preventDefault(); toggleDeaf(); }
+});
+
+// Start up: draw the icons, apply settings, and go straight in if we already have a name (like the Discord app).
+hydrateIcons(document);
+applyLook();
+renderUserBar();
+if (localStorage.lcName && (params.get("room") || localStorage.lcLast)) $("#join form").requestSubmit();
+</script>
+</body>
+</html>

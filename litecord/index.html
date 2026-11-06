@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LiteCord</title>
+<style>
+:root{--bg:#1e1f22;--panel:#2b2d31;--main:#313338;--hover:#3a3c42;--text:#dbdee1;--dim:#949ba4;--accent:#5865f2;--green:#23a55a;--red:#da373c}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%;background:var(--main);color:var(--text);font:15px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+button,select,input,textarea{font:inherit;color:inherit}
+a{color:#00a8fc}
+#join{position:fixed;inset:0;display:grid;place-items:center;background:var(--bg)}
+#join form{background:var(--panel);padding:28px;border-radius:8px;width:min(340px,92vw);display:grid;gap:10px}
+#join h1{margin:0 0 6px;font-size:22px;text-align:center}
+#join label{font-size:12px;font-weight:700;text-transform:uppercase;color:var(--dim)}
+input,select,textarea{background:var(--bg);border:0;border-radius:4px;padding:10px;outline:none;width:100%}
+.btn{background:#4e5058;border:0;border-radius:4px;padding:7px 8px;cursor:pointer;width:100%;font-size:14px}
+.btn:hover:not(:disabled){filter:brightness(1.15)}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.primary{background:var(--accent)} .btn.on{background:var(--green)} .btn.danger{background:var(--red)}
+.mini{background:#4e5058;border:0;border-radius:4px;cursor:pointer;font-size:12px;padding:2px 7px}
+.mini:hover{filter:brightness(1.2)}
+.dim{color:var(--dim)}
+#app{display:none;height:100%;grid-template-columns:260px 1fr}
+#app.show{display:grid}
+aside{background:var(--panel);display:flex;flex-direction:column;min-height:0}
+#roomBar{padding:12px;font-weight:700;border-bottom:1px solid #1f2023;display:flex;gap:8px;align-items:center}
+#roomName{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#invite{width:auto;padding:4px 8px;font-size:12px}
+#side{flex:1;overflow:auto;padding:0 8px 12px}
+.cat{display:flex;align-items:center;justify-content:space-between;padding:14px 4px 4px;font-size:12px;font-weight:700;color:var(--dim);text-transform:uppercase}
+.cat .add{background:none;border:0;color:var(--dim);cursor:pointer;font-size:17px;line-height:1;padding:0 4px}
+.cat .add:hover{color:var(--text)}
+.ch{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:4px;color:var(--dim);cursor:pointer}
+.ch:hover{background:var(--hover);color:var(--text)}
+.ch.active{background:#404249;color:#fff}
+.ch.unread{color:#fff;font-weight:600}
+.cn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ch .del{visibility:hidden;background:none;border:0;color:var(--dim);cursor:pointer;font-size:15px;padding:0 2px}
+.ch:hover .del{visibility:visible}
+.badge{background:var(--red);color:#fff;border-radius:8px;font-size:11px;padding:0 6px;font-weight:700}
+.members{padding-left:20px}
+.mem{display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:4px;font-size:14px}
+.sub{font-size:11px;color:var(--dim);text-transform:uppercase;padding:4px 6px 2px;font-weight:700}
+.av{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-weight:700;flex:none;border:2px solid transparent;font-size:13px}
+.mem .av{width:22px;height:22px;font-size:11px}
+.speaking .av{border-color:var(--green)}
+.nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ic{font-size:12px;white-space:nowrap}
+#online{list-style:none;margin:0;padding:0}
+#online li{display:flex;align-items:center;gap:8px;padding:4px 6px;font-size:14px}
+#voicePanel{padding:10px;display:grid;gap:6px;background:#232428;border-top:1px solid #1f2023}
+#vpTop{display:flex;align-items:center;gap:6px}
+#vpInfo{flex:1;min-width:0}
+#vpState{color:var(--green);font-weight:700;font-size:13px}
+#vpName{font-size:12px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+#stageRow{display:flex;gap:6px}
+#shareCfg{display:grid;grid-template-columns:1fr 64px 1fr;gap:6px;align-items:center}
+#shareCfg select,#shareCfg input{padding:5px 6px;font-size:13px}
+#shareCfg label{display:flex;align-items:center;gap:3px;font-size:12px;color:var(--dim)}
+#userBar{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#232428}
+#myName{font-weight:600;font-size:14px}
+#status{font-size:12px;color:var(--dim)}
+main{display:flex;flex-direction:column;min-height:0;min-width:0}
+#chHead{padding:12px 16px;font-weight:700;border-bottom:1px solid #26272b;display:flex;gap:8px;align-items:center;min-height:48px;white-space:nowrap;overflow:hidden}
+#chHead button{background:none;border:0;color:var(--dim);cursor:pointer;padding:0;font-weight:700}
+#chHead button:hover{color:var(--text)}
+#stage{display:flex;flex-wrap:wrap;gap:8px;padding:8px;background:#000;max-height:65%;overflow:auto;justify-content:center}
+.tile{position:relative;flex:1 1 360px;max-width:100%;cursor:zoom-in;background:#000}
+.tile video{width:100%;height:100%;max-height:60vh;object-fit:contain;display:block}
+.tile.mirror video{transform:scaleX(-1)}
+.tile:fullscreen video{max-height:none}
+.tile span{position:absolute;left:8px;bottom:8px;background:#000a;padding:2px 8px;border-radius:4px;font-size:13px}
+#view{flex:1;display:flex;flex-direction:column;min-height:0}
+.dropping #view{outline:2px dashed var(--accent);outline-offset:-8px}
+#msgs{flex:1;overflow:auto;padding:12px 16px}
+.msg{padding:2px 0}
+.msg:not(.cont){margin-top:12px}
+.hd b{margin-right:6px}
+.hd time{font-size:12px;color:var(--dim)}
+.tx{white-space:pre-wrap;word-wrap:break-word}
+.sys{color:var(--dim);font-size:13px;margin-top:8px;font-style:italic}
+.empty{margin:auto;color:var(--dim)}
+.att-img{max-width:min(400px,100%);max-height:300px;border-radius:6px;display:block;margin-top:4px}
+.att-vid{max-width:min(480px,100%);max-height:320px;border-radius:6px;display:block;margin-top:4px;background:#000}
+.att-file{display:inline-flex;gap:6px;margin-top:4px;padding:10px 12px;background:var(--panel);border-radius:6px;text-decoration:none}
+#composer{display:flex;gap:6px;margin:0 16px 18px;background:#383a40;border-radius:8px;padding:0 8px;align-items:center}
+#composer input{background:none;padding:12px 4px}
+.attach{background:#4e5058;border:0;border-radius:50%;width:26px;height:26px;cursor:pointer;flex:none;line-height:1}
+#uploads{padding:0 16px;font-size:13px;color:var(--dim)}
+.forum{overflow:auto;padding:16px;flex:1}
+.newpost{display:grid;gap:8px;background:var(--panel);padding:12px;border-radius:8px;margin-bottom:16px}
+.newpost textarea{resize:vertical}
+.newpost .btn{justify-self:end;width:auto;padding:8px 18px}
+.post{background:var(--panel);border-radius:8px;padding:12px 14px;margin-bottom:8px;cursor:pointer}
+.post:hover{background:var(--hover)}
+.pt{font-weight:700;margin-bottom:2px}
+.pm{font-size:13px;color:var(--dim)}
+#toasts{position:fixed;right:16px;bottom:16px;display:grid;gap:8px;z-index:10;max-width:340px}
+.toast{background:#111214;padding:10px 14px;border-radius:6px;box-shadow:0 4px 12px #0006;font-size:14px}
+dialog{background:var(--panel);color:var(--text);border:0;border-radius:8px;max-width:440px;padding:20px}
+dialog::backdrop{background:#0009}
+dialog h2{margin:0 0 8px;font-size:18px}
+dialog p{font-size:14px;color:var(--dim)}
+#codes{list-style:none;padding:0;display:grid;gap:10px}
+.code{font-family:ui-monospace,Consolas,monospace;font-size:17px;letter-spacing:1px;color:#fff}
+@media (max-width:640px){
+  #app{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  #side{max-height:200px}
+}
+</style>
+</head>
+<body>
+<div id="join">
+  <form>
+    <h1>LiteCord</h1>
+    <label for="name">Your name</label>
+    <input id="name" maxlength="32" required autofocus>
+    <label for="room">Server</label>
+    <input id="room" maxlength="32">
+    <button class="btn primary">Join</button>
+  </form>
+</div>
+
+<div id="app">
+  <aside>
+    <div id="roomBar"><span id="roomName"></span><button id="invite" class="btn">Copy link</button></div>
+    <div id="side">
+      <div id="channels"></div>
+      <div class="cat"><span>Online — <span id="count">0</span></span></div>
+      <ul id="online"></ul>
+    </div>
+    <div id="voicePanel" hidden>
+      <div id="vpTop">
+        <div id="vpInfo"><div id="vpState">Voice connected</div><div id="vpName"></div></div>
+        <button id="e2eeBtn" class="mini" title="End-to-end encrypted. Click to check safety codes.">🔒</button>
+        <button id="leaveBtn" class="mini" title="Disconnect">📴</button>
+      </div>
+      <div class="row"><button id="muteBtn" class="btn"></button><button id="deafBtn" class="btn"></button></div>
+      <div class="row"><button id="camBtn" class="btn"></button><button id="shareBtn" class="btn"></button></div>
+      <div id="shareCfg" title="Screen share limits. You can change these while sharing.">
+        <select id="res"></select>
+        <label><input id="fps" type="number" min="1" max="60" step="1">fps</label>
+        <select id="hint"><option value="motion">Smooth</option><option value="detail">Sharp text</option></select>
+      </div>
+      <div id="stageRow"><button id="handBtn" class="btn"></button><button id="audBtn" class="btn">⬇ Move to audience</button></div>
+    </div>
+    <div id="userBar"><span id="myAv"></span><div><div id="myName"></div><div id="status">Connecting…</div></div></div>
+  </aside>
+  <main>
+    <div id="chHead"></div>
+    <div id="stage" hidden></div>
+    <div id="view"></div>
+    <div id="uploads"></div>
+  </main>
+</div>
+
+<dialog id="e2ee">
+  <h2>🔒 End-to-end encrypted</h2>
+  <p>Voice, video and screen share go straight from your browser to your friends' browsers, encrypted. The server can't see or hear them.</p>
+  <p>To be sure nobody is in the middle, compare these codes with each person (read them out loud). If they match, the call is private.</p>
+  <ul id="codes"></ul>
+  <form method="dialog"><button class="btn primary">Close</button></form>
+</dialog>
+<div id="toasts"></div>
+<div id="sounds" hidden></div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+// Tiny element builder: h("div", {class: "x", onclick: fn}, ...children)
+function h(tag, props = {}, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === "class") el.className = v;
+    else if (k === "style") el.style.cssText = v;
+    else if (k in el) el[k] = v;
+    else el.setAttribute(k, v);
+  }
+  el.append(...kids.filter(x => x != null && x !== false));
+  return el;
+}
+
+const ICE = {iceServers: [{urls: "stun:stun.l.google.com:19302"}, {urls: "stun:stun.cloudflare.com:3478"}]};
+const RESOLUTIONS = {
+  "360": {w: 640, h: 360, label: "360p"},
+  "480": {w: 854, h: 480, label: "480p"},
+  "720": {w: 1280, h: 720, label: "720p"},
+  "1080": {w: 1920, h: 1080, label: "1080p"},
+  "1440": {w: 2560, h: 1440, label: "1440p"},
+  "max": {w: 0, h: 0, label: "Full"},
+};
+const CAM = {w: 640, h: 360, fps: 15, br: 500e3};  // camera kept small: cheap to encode and decode
+const MAX_FILE = 25 * 1024 * 1024;
+const ICONS = {text: "#", voice: "🔊", stage: "🎙️", forum: "💬"};
+const GROUPS = [["text", "Text channels"], ["voice", "Voice channels"], ["stage", "Stage channels"], ["forum", "Forums"]];
+
+const myId = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+let myName = "", room = "";
+const people = new Map();   // id -> {id, name, state}
+let channels = [];          // from the server
+const cache = new Map();    // channel or post id -> loaded messages
+const unread = new Map();   // channel id -> count
+let view = null;            // {ch, kind: "text" | "forum" | "post", parent}
+const pcs = new Map();      // peer id -> peer connection info
+const remote = new Map();   // remote track id -> {el, peer, kind, streamId}
+let voiceCh = null;
+const me = {speaker: false, hand: false};
+let micStream = null, camStream = null, screenStream = null, camTile = null;
+let muted = false, deaf = false, lastMsg = null, titleUnread = 0;
+let micBusy = false, micFailed = false;
+const canMedia = !!navigator.mediaDevices?.getUserMedia;
+const canShare = !!navigator.mediaDevices?.getDisplayMedia;
+
+/* ---------- joining ---------- */
+const params = new URLSearchParams(location.search);
+$("#name").value = localStorage.lcName || "";
+$("#room").value = params.get("room") || "lobby";
+for (const [k, r] of Object.entries(RESOLUTIONS)) $("#res").add(new Option(r.label, k));
+$("#res").value = RESOLUTIONS[localStorage.lcRes] ? localStorage.lcRes : "720";
+$("#fps").value = localStorage.lcFps || 20;
+$("#hint").value = localStorage.lcHint === "detail" ? "detail" : "motion";
+
+$("#join form").onsubmit = e => {
+  e.preventDefault();
+  myName = $("#name").value.trim();
+  room = $("#room").value.trim() || "lobby";
+  if (!myName) return;
+  localStorage.lcName = myName;
+  history.replaceState(null, "", "?room=" + encodeURIComponent(room));
+  $("#join").remove();
+  $("#app").classList.add("show");
+  $("#roomName").textContent = room;
+  $("#myName").textContent = myName;
+  $("#myAv").replaceChildren(avatar({id: myId, name: myName}));
+  if (!window.isSecureContext)
+    toast("⚠ This page isn't using HTTPS, so voice, video and screen share are off. Open it through localhost, --https, or a tunnel (see README).", 20000);
+  connect();
+};
+
+/* ---------- server connection (Server-Sent Events + POST) ---------- */
+let outbox = [], sending = false;
+function send(msg) { outbox.push(msg); if (!sending) flush(); }
+async function flush() {  // one request at a time keeps messages in order
+  sending = true;
+  while (outbox.length) {
+    const batch = outbox.splice(0);
+    try {
+      const r = await fetch("send", {method: "POST", headers: {"Content-Type": "application/json"},
+                                     body: JSON.stringify({id: myId, msgs: batch})});
+      if (!r.ok && r.status !== 410) throw new Error(r.status);
+    } catch (err) {
+      outbox.unshift(...batch);
+      await new Promise(r => setTimeout(r, 1500));
+    }
+  }
+  sending = false;
+}
+
+function connect() {
+  const es = new EventSource(`events?id=${myId}&name=${encodeURIComponent(myName)}&room=${encodeURIComponent(room)}`);
+  es.onmessage = e => onServer(JSON.parse(e.data));
+  es.onopen = () => status("Connected");
+  es.onerror = () => status("Reconnecting…");
+}
+addEventListener("pagehide", () => navigator.sendBeacon("leave", JSON.stringify({id: myId})));
+
+function onServer(m) {
+  switch (m.type) {
+    case "welcome":
+      people.clear();
+      m.peers.forEach(p => people.set(p.id, p));
+      channels = m.channels;
+      cache.clear();
+      if (voiceCh && !chById(voiceCh)) leaveVoice();
+      sendState(); syncMedia(); renderPanel();
+      openView(view && viewExists(view) ? view : defaultView());
+      break;
+    case "channels":
+      channels = m.channels;
+      if (voiceCh && !chById(voiceCh)) leaveVoice();
+      if (!view || !viewExists(view)) openView(defaultView());
+      else { renderSidebar(); if (view.kind === "forum") renderView(); }
+      renderPanel();
+      break;
+    case "join":
+      people.set(m.peer.id, m.peer);
+      renderSidebar();
+      break;
+    case "leave":
+      people.delete(m.id); closePeer(m.id); renderSidebar();
+      break;
+    case "state": onState(m.id, m.state); break;
+    case "chat": onChat(m); break;
+    case "post": onPost(m); break;
+    case "signal":
+      if (sameCall(m.from)) onSignal(m.from, m.data);
+      break;
+  }
+}
+
+/* ---------- channels and messages ---------- */
+const chById = id => channels.find(c => c.id === id);
+function findPost(id) {
+  for (const forum of channels) {
+    const post = forum.kind === "forum" && forum.posts.find(p => p.id === id);
+    if (post) return {post, forum};
+  }
+  return null;
+}
+const viewExists = v => v.kind === "post" ? !!findPost(v.ch) : !!chById(v.ch);
+function defaultView() {
+  const c = channels.find(c => c.kind === "text") || channels.find(c => c.kind === "forum");
+  return c ? {ch: c.id, kind: c.kind} : null;
+}
+const isChatView = () => view && (view.kind === "text" || view.kind === "post");
+
+function onChat(m) {
+  const ref = findPost(m.ch);
+  if (ref) { ref.post.count++; ref.post.last = m.ts; }
+  if (cache.has(m.ch)) cache.get(m.ch).push(m);
+  if (view?.ch === m.ch) { if (cache.has(m.ch)) addChat(m); }
+  else {
+    if (ref && view?.ch === ref.forum.id) renderView();
+    if (m.id !== myId) bump(ref ? ref.forum.id : m.ch);
+  }
+  if (document.hidden && m.id !== myId) document.title = `(${++titleUnread}) LiteCord`;
+}
+function onPost(m) {
+  const forum = chById(m.ch);
+  if (!forum) return;
+  forum.posts.unshift(m.post);
+  if (m.post.uid === myId && view?.ch === forum.id) return openView({ch: m.post.id, kind: "post", parent: forum.id});
+  if (view?.ch === forum.id) renderView();
+  else if (m.post.uid !== myId) bump(forum.id);
+}
+function bump(id) { unread.set(id, (unread.get(id) || 0) + 1); renderSidebar(); }
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { titleUnread = 0; document.title = "LiteCord"; } });
+
+function openView(v) {
+  view = v;
+  if (v) unread.delete(v.kind === "post" ? v.parent : v.ch);
+  renderSidebar();
+  renderView();
+}
+
+async function renderView() {
+  const head = $("#chHead"), box = $("#view");
+  lastMsg = null;
+  if (!view) {
+    head.replaceChildren();
+    box.replaceChildren(h("div", {class: "empty"}, "No channels yet. Make one with +"));
+    return;
+  }
+  if (view.kind === "forum") return renderForum(chById(view.ch));
+  let placeholder;
+  if (view.kind === "post") {
+    const ref = findPost(view.ch);
+    head.replaceChildren(h("button", {title: "Back to the forum", onclick: () => openView({ch: ref.forum.id, kind: "forum"})},
+                           `${ICONS.forum} ${ref.forum.name}`), h("span", {class: "dim"}, "›"), h("span", {class: "cn"}, ref.post.title));
+    placeholder = "Reply to this post";
+  } else {
+    const c = chById(view.ch);
+    head.replaceChildren(`# ${c.name}`);
+    placeholder = `Message #${c.name}`;
+  }
+  const msgs = h("div", {id: "msgs"});
+  box.replaceChildren(msgs, composer(placeholder));
+  const ch = view.ch;
+  if (!cache.has(ch)) {
+    msgs.append(h("div", {class: "sys"}, "Loading…"));
+    let list = [];
+    try { const r = await fetch(`history?id=${myId}&ch=${ch}`); if (r.ok) list = await r.json(); } catch {}
+    if (!cache.has(ch)) cache.set(ch, list);
+    if (view?.ch !== ch || !msgs.isConnected) return;
+    msgs.replaceChildren();
+  }
+  cache.get(ch).forEach(addChat);
+  if (view.kind === "post" && !cache.get(ch).length) msgs.append(h("div", {class: "sys"}, "No replies yet."));
+  msgs.scrollTop = msgs.scrollHeight;
+  if (matchMedia("(pointer: fine)").matches) $("#text")?.focus();
+}
+
+function composer(placeholder) {
+  const input = h("input", {id: "text", maxLength: 2000, autocomplete: "off", placeholder});
+  const picker = h("input", {type: "file", multiple: true, hidden: true});
+  picker.onchange = () => { [...picker.files].forEach(upload); picker.value = ""; };
+  input.onpaste = e => {
+    const list = [...(e.clipboardData?.files || [])];
+    if (list.length) { e.preventDefault(); list.forEach(upload); }
+  };
+  return h("form", {id: "composer", onsubmit: e => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      send({type: "chat", ch: view.ch, text});
+      input.value = "";
+    }},
+    h("button", {type: "button", class: "attach", title: "Upload a file (or drag it in, or paste it)", onclick: () => picker.click()}, "+"),
+    input, picker);
+}
+
+function renderForum(c) {
+  $("#chHead").replaceChildren(`${ICONS.forum} ${c.name}`);
+  const title = h("input", {placeholder: "Post title", maxLength: 100});
+  const body = h("textarea", {placeholder: "What do you want to talk about?", maxLength: 2000, rows: 3});
+  const form = h("form", {class: "newpost", onsubmit: e => {
+      e.preventDefault();
+      if (!title.value.trim()) return title.focus();
+      send({type: "post", ch: c.id, title: title.value, text: body.value});
+      title.value = body.value = "";
+    }}, title, body, h("button", {class: "btn primary"}, "Post"));
+  const posts = [...c.posts].sort((a, b) => b.last - a.last).map(p =>
+    h("div", {class: "post", onclick: () => openView({ch: p.id, kind: "post", parent: c.id})},
+      h("div", {class: "pt"}, p.title),
+      h("div", {class: "pm"}, `${p.author} · ${p.count} ${p.count === 1 ? "reply" : "replies"} · ${fmtTime(p.last)}`)));
+  $("#view").replaceChildren(h("div", {class: "forum"}, form,
+    posts.length ? h("div", {}, ...posts) : h("div", {class: "sys"}, "No posts yet. Start the first one!")));
+}
+
+function createChannel(kind) {
+  const label = GROUPS.find(g => g[0] === kind)[1].replace(/s$/, "").toLowerCase();
+  const name = prompt(`Name for the new ${label}:`);
+  if (name?.trim()) send({type: "channel", action: "create", kind, name});
+}
+function deleteChannel(c) {
+  if (confirm(`Delete "${c.name}"? Everything in it will be gone.`)) send({type: "channel", action: "delete", ch: c.id});
+}
+
+/* ---------- file sharing ---------- */
+function upload(file) {
+  if (!isChatView()) return;
+  if (!file.size) return toast(`"${file.name}" is empty.`);
+  if (file.size > MAX_FILE) return toast(`"${file.name}" is too big. The limit is 25 MB.`);
+  const ch = view.ch;
+  const line = h("div", {}, `Uploading ${file.name}…`);
+  $("#uploads").append(line);
+  const xhr = new XMLHttpRequest();
+  xhr.open("POST", `upload?id=${myId}&name=${encodeURIComponent(file.name)}`);
+  xhr.upload.onprogress = e => {
+    if (e.lengthComputable) line.textContent = `Uploading ${file.name}… ${Math.round(e.loaded / e.total * 100)}%`;
+  };
+  xhr.onload = () => {
+    line.remove();
+    if (xhr.status !== 200) return toast(`Upload failed: ${xhr.responseText || xhr.status}`);
+    send({type: "chat", ch, text: "", file: JSON.parse(xhr.responseText).id});
+  };
+  xhr.onerror = () => { line.remove(); toast(`Upload failed: ${file.name}`); };
+  xhr.send(file);
+}
+function attachment(f) {
+  const keepScrolled = () => { const b = $("#msgs"); if (b && b.scrollHeight - b.scrollTop - b.clientHeight < 400) b.scrollTop = b.scrollHeight; };
+  if (f.inline && f.type.startsWith("image/"))
+    return h("a", {href: f.url, target: "_blank", rel: "noopener"}, h("img", {src: f.url, alt: f.name, class: "att-img", loading: "lazy", onload: keepScrolled}));
+  if (f.inline && f.type.startsWith("video/"))
+    return h("video", {src: f.url, controls: true, preload: "metadata", class: "att-vid", onloadedmetadata: keepScrolled});
+  if (f.inline && f.type.startsWith("audio/"))
+    return h("div", {}, h("audio", {src: f.url, controls: true, preload: "none"}));
+  return h("a", {href: f.url, download: f.name, class: "att-file"}, "📄", f.name, h("span", {class: "dim"}, fmtSize(f.size)));
+}
+function fmtSize(n) { return n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(0) + " KB" : (n / 1048576).toFixed(1) + " MB"; }
+
+const mainEl = $("main");
+addEventListener("dragover", e => e.preventDefault());  // don't let a missed drop open the file
+addEventListener("drop", e => e.preventDefault());
+mainEl.addEventListener("dragover", e => { if (isChatView() && e.dataTransfer.types.includes("Files")) document.body.classList.add("dropping"); });
+mainEl.addEventListener("dragleave", e => { if (!mainEl.contains(e.relatedTarget)) document.body.classList.remove("dropping"); });
+mainEl.addEventListener("drop", e => {
+  document.body.classList.remove("dropping");
+  if (isChatView()) [...e.dataTransfer.files].forEach(upload);
+});
+
+/* ---------- voice, stage and presence state ---------- */
+const isStage = () => chById(voiceCh)?.kind === "stage";
+const canSend = () => !!voiceCh && (!isStage() || me.speaker);
+function myState() {
+  return {voice: voiceCh, muted, deaf, cam: camStream?.id || null, screen: screenStream?.id || null,
+          hand: me.hand, speaker: me.speaker};
+}
+function sendState() { send({type: "state", state: myState()}); }
+const stateOf = id => id === myId ? myState() : people.get(id)?.state || {};
+const sameCall = id => !!voiceCh && people.get(id)?.state?.voice === voiceCh;
+
+function onState(id, st) {
+  if (id === myId) {  // the server decides who is a speaker on a stage
+    const was = me.speaker;
+    me.speaker = !!st.speaker;
+    me.hand = !!st.hand;
+    if (was !== me.speaker) {
+      if (voiceCh && st.voice === voiceCh) toast(me.speaker ? "🎙️ You're a speaker now." : "You're in the audience.");
+      if (!me.speaker) { stopCamera(false); stopShare(false); }
+      updateMic();
+    }
+    renderSidebar(); renderPanel(); syncMedia();
+    return;
+  }
+  const p = people.get(id);
+  if (!p) return;
+  p.state = st;
+  for (const [tid, r] of [...remote])
+    if (r.peer === id && r.kind !== "voice" && r.streamId !== st.cam && r.streamId !== st.screen) removeRemote(tid);
+  relabelTiles(); renderSidebar(); syncMedia();
+}
+
+async function joinVoice(id) {
+  if (voiceCh === id) return;
+  if (!canMedia) return toast("Voice needs HTTPS. See the README.");
+  if (voiceCh) leaveVoice();
+  voiceCh = id;
+  me.speaker = me.hand = false;
+  micFailed = false;
+  sendState();
+  renderSidebar(); renderPanel();
+  await updateMic();
+}
+function leaveVoice() {
+  if (!voiceCh) return;
+  voiceCh = null;
+  me.speaker = me.hand = false;
+  stopCamera(false); stopShare(false);
+  updateMic();
+  sendState(); syncMedia(); renderSidebar(); renderPanel();
+}
+
+// Grab the mic only when we're allowed to talk (not while sitting in a stage audience).
+async function updateMic() {
+  if (micBusy) return;
+  micBusy = true;
+  try {
+    if (canSend() && !micStream && !micFailed) {
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({audio: {
+          echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1}});
+        micStream = s;
+      } catch (err) {
+        micFailed = true;
+        toast("Couldn't use your microphone: " + err.message + ". You can still listen.");
+      }
+    } else if (!canSend() && micStream) {
+      micStream.getTracks().forEach(t => t.stop());
+      micStream = null;
+    }
+  } finally { micBusy = false; }
+  if (canSend() !== !!micStream && !micFailed) return updateMic();  // things changed while waiting
+  applyMicEnabled(); syncMedia(); renderPanel();
+}
+function applyMicEnabled() { micStream?.getAudioTracks().forEach(t => t.enabled = !muted && !deaf); }
+
+function toggleMute() {
+  muted = !muted;
+  if (!muted && deaf) deaf = false;
+  applyMicEnabled(); applyAudio(); sendState(); renderPanel(); renderSidebar();
+}
+function toggleDeaf() {
+  deaf = !deaf;
+  applyMicEnabled(); applyAudio(); sendState(); renderPanel(); renderSidebar();
+}
+function toggleHand() { me.hand = !me.hand; sendState(); renderPanel(); }
+
+/* ---------- camera ---------- */
+async function toggleCamera() {
+  if (camStream) return stopCamera();
+  if (!canSend()) return;
+  let s;
+  try {
+    s = await navigator.mediaDevices.getUserMedia({video: {
+      width: {ideal: CAM.w}, height: {ideal: CAM.h}, frameRate: {ideal: CAM.fps, max: CAM.fps}}});
+  } catch (err) { return toast("Couldn't use your camera: " + err.message); }
+  if (!canSend()) return s.getTracks().forEach(t => t.stop());
+  camStream = s;
+  const t = s.getVideoTracks()[0];
+  t.contentHint = "motion";
+  t.addEventListener("ended", () => stopCamera());
+  camTile = makeTile(t, "You", true);
+  syncMedia(); sendState(); renderPanel(); renderSidebar();
+}
+function stopCamera(notify = true) {
+  if (!camStream) return;
+  camStream.getTracks().forEach(t => t.stop());
+  camStream = null;
+  camTile?.remove(); camTile = null;
+  updateStage(); syncMedia();
+  if (notify) sendState();
+  renderPanel(); renderSidebar();
+}
+
+/* ---------- screen share (custom resolution / fps limits) ---------- */
+function shareLimits() {
+  const r = RESOLUTIONS[$("#res").value] || RESOLUTIONS["720"];
+  const fps = Math.min(60, Math.max(1, Math.round(+$("#fps").value) || 20));
+  const w = r.w || 2560, hgt = r.h || 1440;
+  // Bitrate grows with pixels and frame rate, clamped to something a home connection can carry.
+  const br = Math.round(Math.min(8e6, Math.max(300e3, w * hgt * fps * 0.08)));
+  return {w: r.w, h: r.h, fps, br, hint: $("#hint").value};
+}
+function shareConstraints(q) {
+  const v = {frameRate: {max: q.fps}};
+  if (q.w) { v.width = {max: q.w}; v.height = {max: q.h}; }
+  return v;
+}
+async function toggleShare() {
+  if (screenStream) return stopShare();
+  if (!canSend()) return;
+  const q = shareLimits();
+  let s;
+  try {
+    s = await navigator.mediaDevices.getDisplayMedia({video: shareConstraints(q), audio: true});
+  } catch (err) {
+    if (err.name !== "NotAllowedError") toast("Couldn't share your screen: " + err.message);
+    return;
+  }
+  if (!canSend()) return s.getTracks().forEach(t => t.stop());
+  screenStream = s;
+  const v = s.getVideoTracks()[0];
+  v.contentHint = q.hint;
+  v.addEventListener("ended", () => stopShare());  // browser's own "Stop sharing" button
+  syncMedia(); sendState(); renderPanel(); renderSidebar();
+  toast("You're sharing your screen. (No preview of it here, to save CPU.)");
+}
+function stopShare(notify = true) {
+  if (!screenStream) return;
+  screenStream.getTracks().forEach(t => t.stop());
+  screenStream = null;
+  syncMedia();
+  if (notify) sendState();
+  renderPanel(); renderSidebar();
+}
+function applyShareLimits() {
+  const q = shareLimits();
+  $("#fps").value = q.fps;
+  localStorage.lcRes = $("#res").value; localStorage.lcFps = q.fps; localStorage.lcHint = q.hint;
+  if (!screenStream) return;
+  const v = screenStream.getVideoTracks()[0];
+  v.contentHint = q.hint;
+  v.applyConstraints(shareConstraints(q)).catch(() => {});
+  for (const p of pcs.values()) setEncoding(p.out.screen, {maxBitrate: q.br, maxFramerate: q.fps});
+}
+function setEncoding(out, enc) {
+  for (const s of out?.senders || []) {
+    if (s.track?.kind !== "video") continue;
+    const prm = s.getParameters();
+    if (!prm.encodings?.length) continue;
+    prm.encodings.forEach(e => Object.assign(e, enc));
+    s.setParameters(prm).catch(() => {});
+  }
+}
+
+/* ---------- WebRTC: direct, end-to-end encrypted browser-to-browser media ---------- */
+// Only people in the same voice/stage channel connect, and only once someone has something to send.
+function syncMedia() {
+  for (const id of [...pcs.keys()]) if (!sameCall(id)) closePeer(id);
+  for (const id of people.keys()) {
+    if (!sameCall(id)) continue;
+    const ok = canSend();
+    const want = {mic: ok ? micStream : null, cam: ok ? camStream : null, screen: ok ? screenStream : null};
+    let p = pcs.get(id);
+    if (!p && !want.mic && !want.cam && !want.screen) continue;
+    p = p || makePeer(id);
+    const q = shareLimits();
+    try {
+      setStream(p, "mic", want.mic);
+      setStream(p, "cam", want.cam, {maxBitrate: CAM.br, maxFramerate: CAM.fps});
+      setStream(p, "screen", want.screen, {maxBitrate: q.br, maxFramerate: q.fps});
+    } catch (err) { console.warn(err); }
+  }
+  applyAudio();
+}
+function setStream(p, key, stream, videoEnc) {
+  const cur = p.out[key];
+  if ((cur?.stream || null) === stream) return;
+  if (cur) { cur.senders.forEach(s => { try { p.pc.removeTrack(s); } catch {} }); delete p.out[key]; }
+  if (!stream) return;
+  const senders = [];
+  for (const t of stream.getTracks().sort((a, b) => (a.kind === "video" ? 0 : 1) - (b.kind === "video" ? 0 : 1))) {
+    const init = {direction: "sendonly", streams: [stream]};
+    if (t.kind === "video" && videoEnc) init.sendEncodings = [videoEnc];
+    const tr = p.pc.addTransceiver(t, init);
+    if (t.kind === "video") preferH264(tr);
+    senders.push(tr.sender);
+  }
+  p.out[key] = {stream, senders};
+}
+// H.264 can use the laptop's hardware video encoder, which is much lighter on the CPU.
+function preferH264(tr) {
+  try {
+    const caps = RTCRtpReceiver.getCapabilities?.("video");
+    if (!caps || !tr.setCodecPreferences) return;
+    const rank = c => /h264/i.test(c.mimeType) ? 0 : /vp8/i.test(c.mimeType) ? 1 : 2;
+    tr.setCodecPreferences([...caps.codecs].sort((a, b) => rank(a) - rank(b)));
+  } catch (err) { console.warn(err); }
+}
+
+function makePeer(id) {
+  const pc = new RTCPeerConnection(ICE);
+  // "Perfect negotiation": both sides may start; the polite one backs off on a clash.
+  const p = {id, pc, polite: myId < id, makingOffer: false, ignoreOffer: false, chain: Promise.resolve(), out: {}, warned: false};
+  pcs.set(id, p);
+  pc.onnegotiationneeded = async () => {
+    try {
+      p.makingOffer = true;
+      await pc.setLocalDescription();
+      send({type: "signal", to: id, data: {description: pc.localDescription}});
+    } catch (err) { console.warn(err); } finally { p.makingOffer = false; }
+  };
+  pc.onicecandidate = e => { if (e.candidate) send({type: "signal", to: id, data: {candidate: e.candidate}}); };
+  pc.ontrack = e => onRemoteTrack(id, e);
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === "failed") {
+      pc.restartIce();
+      if (!p.warned) { p.warned = true; toast(`Couldn't connect directly to ${people.get(id)?.name || "someone"}. Retrying… (strict networks can block this, see README)`); }
+    }
+    renderSidebar();
+  };
+  return p;
+}
+function onSignal(from, data) {
+  const p = pcs.get(from) || makePeer(from);
+  p.chain = p.chain.then(() => handleSignal(p, data)).catch(err => console.warn(err));
+}
+async function handleSignal(p, {description, candidate}) {
+  const pc = p.pc;
+  if (description) {
+    const clash = description.type === "offer" && (p.makingOffer || pc.signalingState !== "stable");
+    p.ignoreOffer = !p.polite && clash;
+    if (p.ignoreOffer) return;
+    await pc.setRemoteDescription(description);
+    if (description.type === "offer") {
+      await pc.setLocalDescription();
+      send({type: "signal", to: p.id, data: {description: pc.localDescription}});
+    }
+  } else if (candidate) {
+    try { await pc.addIceCandidate(candidate); } catch (err) { if (!p.ignoreOffer) throw err; }
+  }
+}
+function closePeer(id) {
+  const p = pcs.get(id);
+  if (!p) return;
+  p.pc.close();
+  pcs.delete(id);
+  for (const [tid, r] of [...remote]) if (r.peer === id) removeRemote(tid);
+}
+
+function onRemoteTrack(peerId, {track, streams}) {
+  if (remote.has(track.id)) return;
+  const stream = streams[0];
+  const kind = track.kind === "video" ? "video" : stream?.getVideoTracks().length ? "screen-audio" : "voice";
+  const r = {peer: peerId, kind, streamId: stream?.id};
+  if (track.kind === "audio") {
+    r.el = h("audio", {autoplay: true});
+    r.el.srcObject = new MediaStream([track]);
+    $("#sounds").append(r.el);
+    r.el.play().catch(() => {});
+  } else {
+    r.el = makeTile(track, "", false);
+  }
+  remote.set(track.id, r);
+  relabelTiles(); applyAudio();
+  stream?.addEventListener("removetrack", e => { if (e.track.id === track.id) removeRemote(track.id); });
+  track.addEventListener("ended", () => removeRemote(track.id));
+}
+function removeRemote(trackId) {
+  const r = remote.get(trackId);
+  if (!r) return;
+  const media = r.el.tagName === "AUDIO" ? r.el : r.el.querySelector("video");
+  if (media) media.srcObject = null;
+  r.el.remove();
+  remote.delete(trackId);
+  updateStage();
+}
+// Voice is heard only by people in the same channel (on a stage, only from speakers).
+function canHear(r) {
+  if (deaf || !voiceCh) return false;
+  const st = stateOf(r.peer);
+  if (st.voice !== voiceCh) return false;
+  return !(r.kind === "voice" && isStage() && !st.speaker);
+}
+function applyAudio() { for (const r of remote.values()) if (r.el.tagName === "AUDIO") r.el.muted = !canHear(r); }
+
+function makeTile(track, label, mirror) {
+  const v = h("video", {autoplay: true, playsInline: true, muted: true});
+  v.srcObject = new MediaStream([track]);
+  const tile = h("div", {class: "tile" + (mirror ? " mirror" : ""), title: "Click for fullscreen"}, v, h("span", {}, label));
+  tile.onclick = () => document.fullscreenElement ? document.exitFullscreen() : tile.requestFullscreen?.();
+  $("#stage").append(tile);
+  updateStage();
+  return tile;
+}
+function relabelTiles() {
+  for (const r of remote.values()) {
+    if (r.kind !== "video") continue;
+    const p = people.get(r.peer);
+    r.el.querySelector("span").textContent = `${p?.name || "Someone"}'s ${p?.state?.cam === r.streamId ? "camera" : "screen"}`;
+  }
+}
+function updateStage() { $("#stage").hidden = !$("#stage").children.length; }
+
+/* ---------- end-to-end encryption check ---------- */
+// Both browsers hash the two encryption-key fingerprints. If anyone sat in the middle, the codes would differ.
+async function safetyCode(pc) {
+  const fp = sdp => (sdp?.match(/a=fingerprint:\S+ (\S+)/i) || [])[1];
+  const a = fp(pc.localDescription?.sdp), b = fp(pc.remoteDescription?.sdp);
+  if (!a || !b || pc.connectionState !== "connected") return null;
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode([a, b].sort().join("|"))));
+  const groups = [];
+  for (let i = 0; i < 5; i++) groups.push(String(((hash[2 * i] << 8) | hash[2 * i + 1]) % 10000).padStart(4, "0"));
+  return groups.join(" ");
+}
+async function showSafety() {
+  const rows = [];
+  for (const [id, p] of pcs) {
+    const code = await safetyCode(p.pc);
+    rows.push(h("li", {}, h("b", {}, people.get(id)?.name || "Someone"), h("div", {class: "code"}, code || "connecting…")));
+  }
+  $("#codes").replaceChildren(...(rows.length ? rows : [h("li", {class: "dim"}, "Nobody is connected to you in this channel yet.")]));
+  $("#e2ee").showModal();
+}
+
+/* ---------- speaking indicator (cheap: reads levels WebRTC already measures) ---------- */
+setInterval(async () => {
+  if (document.hidden || !voiceCh) return;
+  const speaking = new Set();
+  for (const [id, p] of pcs) {
+    for (const r of p.pc.getReceivers()) {
+      if (remote.get(r.track?.id)?.kind !== "voice") continue;
+      const src = r.getSynchronizationSources?.()[0];
+      if (src && src.audioLevel > 0.03) speaking.add(id);
+    }
+  }
+  const mic = [...pcs.values()].find(p => p.out.mic)?.out.mic.senders[0];
+  if (mic && !muted && !deaf) {
+    try { (await mic.getStats()).forEach(s => { if (s.type === "media-source" && s.audioLevel > 0.03) speaking.add(myId); }); } catch {}
+  }
+  document.querySelectorAll(".mem[data-vid]").forEach(el => el.classList.toggle("speaking", speaking.has(el.dataset.vid)));
+}, 300);
+
+/* ---------- sidebar and controls ---------- */
+function hue(s) { let n = 0; for (const c of s) n = (n * 31 + c.charCodeAt(0)) % 360; return n; }
+function avatar(p) { return h("span", {class: "av", style: `background:hsl(${hue(p.id)} 45% 40%)`}, (p.name[0] || "?").toUpperCase()); }
+function everyone() { return [{id: myId, name: myName, state: myState()}, ...people.values()]; }
+
+function renderSidebar() {
+  const list = $("#channels");
+  list.replaceChildren();
+  for (const [kind, label] of GROUPS) {
+    list.append(h("div", {class: "cat"}, h("span", {}, label),
+      h("button", {class: "add", title: "Create channel", onclick: () => createChannel(kind)}, "+")));
+    for (const c of channels.filter(c => c.kind === kind)) {
+      const isCall = kind === "voice" || kind === "stage";
+      const active = isCall ? voiceCh === c.id : view && (view.ch === c.id || view.parent === c.id);
+      const n = unread.get(c.id) || 0;
+      list.append(h("div", {class: "ch" + (active ? " active" : "") + (n ? " unread" : ""),
+                            title: isCall ? (voiceCh === c.id ? "You're here" : "Click to join") : "",
+                            onclick: () => isCall ? joinVoice(c.id) : openView({ch: c.id, kind})},
+        h("span", {}, ICONS[kind]), h("span", {class: "cn"}, c.name),
+        n ? h("span", {class: "badge"}, n > 99 ? "99+" : n) : null,
+        h("button", {class: "del", title: "Delete channel", onclick: e => { e.stopPropagation(); deleteChannel(c); }}, "×")));
+      if (isCall) list.append(renderMembers(c));
+    }
+  }
+  const all = everyone();
+  $("#count").textContent = all.length;
+  $("#online").replaceChildren(...all.map(p => h("li", {}, avatar(p), h("span", {class: "nm"}, p.name + (p.id === myId ? " (you)" : "")),
+    p.state?.voice ? h("span", {class: "ic", title: "In a call"}, "🔊") : null)));
+}
+
+function renderMembers(c) {
+  const stage = c.kind === "stage";
+  const amSpeaker = voiceCh === c.id && me.speaker;
+  const row = p => {
+    const st = p.state || {};
+    const broken = pcs.get(p.id)?.pc.connectionState === "failed";
+    const icons = [st.deaf ? "🔕" : st.muted ? "🔇" : "", st.cam ? "📷" : "", st.screen ? "🖥️" : "", st.hand ? "✋" : "", broken ? "⚠️" : ""].join("");
+    const tip = [st.muted && "Muted", st.deaf && "Deafened", st.cam && "Camera on", st.screen && "Sharing screen",
+                 st.hand && "Wants to speak", broken && "Couldn't connect directly"].filter(Boolean).join(", ");
+    let action = null;
+    if (stage && amSpeaker && p.id !== myId)
+      action = st.speaker
+        ? h("button", {class: "mini", title: "Move to audience", onclick: () => send({type: "stage", action: "audience", target: p.id})}, "⬇")
+        : h("button", {class: "mini", title: "Invite to speak", onclick: () => send({type: "stage", action: "invite", target: p.id})}, "⬆");
+    return h("div", {class: "mem", "data-vid": p.id}, avatar(p), h("span", {class: "nm"}, p.name), h("span", {class: "ic", title: tip}, icons), action);
+  };
+  const inside = everyone().filter(p => p.state?.voice === c.id);
+  const box = h("div", {class: "members"});
+  if (stage) {
+    const speakers = inside.filter(p => p.state.speaker), audience = inside.filter(p => !p.state.speaker);
+    speakers.forEach(p => box.append(row(p)));
+    if (audience.length) box.append(h("div", {class: "sub"}, `Audience — ${audience.length}`), ...audience.map(row));
+  } else inside.forEach(p => box.append(row(p)));
+  return box;
+}
+
+function renderPanel() {
+  $("#voicePanel").hidden = !voiceCh;
+  if (!voiceCh) return;
+  const c = chById(voiceCh), stage = isStage(), ok = canSend();
+  $("#vpState").textContent = stage ? (me.speaker ? "On stage · Speaker" : "On stage · Audience") : "Voice connected";
+  $("#vpName").textContent = `${ICONS[c?.kind] || ""} ${c?.name || ""}`;
+  setBtn("#muteBtn", muted ? "🔇 Unmute" : "🎙️ Mute", muted, !micStream);
+  setBtn("#deafBtn", deaf ? "🔕 Undeafen" : "🔈 Deafen", deaf, false);
+  setBtn("#camBtn", camStream ? "📷 Stop video" : "📷 Video", !!camStream, !ok);
+  setBtn("#shareBtn", screenStream ? "⏹️ Stop share" : "🖥️ Share", !!screenStream, !ok || !canShare);
+  $("#shareCfg").hidden = !ok || !canShare;
+  $("#stageRow").hidden = !stage;
+  $("#handBtn").hidden = me.speaker;
+  $("#handBtn").textContent = me.hand ? "✋ Lower hand" : "✋ Raise hand";
+  $("#handBtn").className = "btn" + (me.hand ? " on" : "");
+  $("#audBtn").hidden = !me.speaker;
+}
+function setBtn(sel, text, active, disabled) {
+  const b = $(sel);
+  b.textContent = text;
+  b.className = "btn" + (active ? " danger" : "");
+  b.disabled = disabled;
+}
+
+/* ---------- small helpers ---------- */
+function fmtTime(ts) {
+  const d = new Date(ts), t = d.toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
+  return d.toDateString() === new Date().toDateString() ? t : d.toLocaleDateString() + " " + t;
+}
+function linkify(el, text) {
+  const re = /https?:\/\/[^\s<>"]+/g;
+  let i = 0, m;
+  while ((m = re.exec(text))) {
+    el.append(text.slice(i, m.index), h("a", {href: m[0], target: "_blank", rel: "noopener noreferrer"}, m[0]));
+    i = m.index + m[0].length;
+  }
+  el.append(text.slice(i));
+}
+function addChat(m) {
+  const box = $("#msgs");
+  if (!box) return;
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+  const grouped = lastMsg && lastMsg.id === m.id && m.ts - lastMsg.ts < 5 * 60e3;
+  const div = h("div", {class: "msg" + (grouped ? " cont" : "")});
+  if (!grouped)
+    div.append(h("div", {class: "hd"}, h("b", {style: `color:hsl(${hue(m.id)} 60% 70%)`}, m.name), h("time", {}, fmtTime(m.ts))));
+  if (m.text) { const tx = h("div", {class: "tx"}); linkify(tx, m.text); div.append(tx); }
+  if (m.file) div.append(attachment(m.file));
+  box.querySelector(".sys:last-child")?.textContent === "No replies yet." && box.lastChild.remove();
+  box.append(div);
+  if (atBottom || m.id === myId) box.scrollTop = box.scrollHeight;
+  lastMsg = m;
+}
+function toast(text, ms = 6000) {
+  const t = h("div", {class: "toast"}, text);
+  $("#toasts").append(t);
+  setTimeout(() => t.remove(), ms);
+}
+function status(text) { $("#status").textContent = text; }
+
+$("#leaveBtn").onclick = leaveVoice;
+$("#muteBtn").onclick = toggleMute;
+$("#deafBtn").onclick = toggleDeaf;
+$("#camBtn").onclick = toggleCamera;
+$("#shareBtn").onclick = toggleShare;
+$("#handBtn").onclick = toggleHand;
+$("#audBtn").onclick = () => send({type: "stage", action: "audience", target: myId});
+$("#e2eeBtn").onclick = showSafety;
+$("#res").onchange = $("#fps").onchange = $("#hint").onchange = applyShareLimits;
+$("#invite").onclick = async () => {
+  try { await navigator.clipboard.writeText(location.href); $("#invite").textContent = "Copied!"; }
+  catch { prompt("Send this link to your friend:", location.href); }
+  setTimeout(() => $("#invite").textContent = "Copy link", 1500);
+};
+addEventListener("keydown", e => {  // Ctrl+Shift+M = mute, Ctrl+Shift+D = deafen
+  if (!e.ctrlKey || !e.shiftKey || !voiceCh) return;
+  if (e.key.toLowerCase() === "m") { e.preventDefault(); toggleMute(); }
+  if (e.key.toLowerCase() === "d") { e.preventDefault(); toggleDeaf(); }
+});
+</script>
+</body>
+</html>
