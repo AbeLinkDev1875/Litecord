@@ -1,0 +1,24 @@
+[package]
+name = "litecord-desktop"
+version = "0.1.0"
+edition = "2021"
+description = "LiteCord's native desktop app, in Rust with GPUI (via GPUI Kit)"
+license = "MIT"
+
+[[bin]]
+name = "litecord"
+path = "src/main.rs"
+
+[dependencies]
+async-channel = "2.5.0"
+base64 = "0.23.1"
+chrono = "0.4.45"
+dirs = "7.0.0"
+futures-util = "0.3.34"
+gpui-kit = "0.9"
+rand = "0.10.3"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tokio = { version = "1.54.1", features = ["rt", "net", "time", "sync", "macros"] }
+tokio-tungstenite = { version = "0.30.0", features = ["rustls-tls-webpki-roots"] }
+ureq = { version = "3.5.1", features = ["json"] }

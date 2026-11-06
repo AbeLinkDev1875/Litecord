@@ -3794,7 +3794,14 @@ function settingsPage(tab) {
       h("p", {class: "tiny"}, "LiteCord has no accounts, so each browser or installed app is its own identity. To use the same friends on another device, add yourself as a friend from there."),
       sect("Current Device", h("div", {class: "devrow"}, icon(os === "Android" || os === "iOS" ? "phone" : "screen"),
         h("div", {}, h("b", {}, `${os} · ${browser}${app ? " (installed app)" : ""}`), h("div", {class: "tiny"}, "This device")))),
-      installPrompt ? sect("Install", h("button", {class: "btn primary", onclick: () => installPrompt?.prompt()}, "Install LiteCord as an app")) : null];
+      installPrompt ? sect("Install", h("button", {class: "btn primary", onclick: () => installPrompt?.prompt()}, "Install LiteCord as an app")) : null,
+      sect("Link the Desktop App",
+        h("p", {class: "tiny"}, "The LiteCord desktop app can use this same account, with your friends and DMs. Copy the code and paste it into the desktop app when it starts."),
+        h("p", {class: "tiny"}, "This code is the key to your account. Only paste it into your own LiteCord app, and never send it to anyone."),
+        h("button", {class: "btn", onclick: () => {
+          const code = {v: 1, uid: myUid, key: myKey, name: myName, username: prefs.username || null, friends, dms};
+          copyText("lc1:" + b64(new TextEncoder().encode(JSON.stringify(code))), "Link code copied. Paste it into the desktop app.");
+        }}, "Copy Link Code"))];
   }
   if (tab === "voice") return voicePage();
   if (tab === "chat") {
