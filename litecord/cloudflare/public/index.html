@@ -601,16 +601,26 @@ main{overflow:hidden}
 #settings{position:fixed;inset:0;width:auto;height:auto;max-width:none;max-height:none;margin:0;border-radius:0;padding:0;background:var(--main)}
 #settings[open]{display:flex;animation:setIn .25s var(--ease);overflow:hidden}
 #settings::backdrop{background:transparent}
-#setNav{flex:1 0 218px;display:block;background:var(--side);padding:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;min-height:0;height:100%}
-.setnavin{width:232px;padding:60px 6px 40px 20px;margin-left:auto}
-.setsearch{padding:6px 8px;font-size:14px;margin-bottom:8px}
-.setlist{display:grid;gap:2px}
-.setlist .sub{padding:12px 10px 4px}
-.setlist .mi{color:var(--muted);padding:6px 10px;font-size:15px}
-.setlist .mi.sel{background:var(--active);color:var(--strong)}
-.setlist .mi:hover:not(.sel){background:var(--hover);color:var(--text)}
+#setNav{flex:1 0 218px;display:flex;justify-content:flex-end;background:var(--side);padding:0;overflow:hidden;min-height:0;height:100%}
+.setnavin{width:248px;max-width:100%;height:100%;display:flex;flex-direction:column;min-height:0;min-width:0}
+.setsearch{flex:none;display:flex;align-items:center;gap:8px;margin:20px 10px 10px 16px;padding:0 12px;background:var(--field);border:1px solid var(--border);border-radius:8px;cursor:text}
+.setsearch:focus-within{border-color:var(--accent)}
+.setsearch .ico{width:18px;height:18px;color:var(--muted)}
+.setsearch input{background:none;padding:9px 0;font-size:15px;min-width:0}
+.setlist{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;gap:2px;padding:4px 10px 40px 16px}
+.setlist .mi{color:var(--muted);font-size:15px;flex:none}
+.setlist .mi.top{gap:12px;padding:8px 10px;border-radius:8px;font-weight:500}
+.setlist .mi.top .ico{width:20px;height:20px}
+.setlist .mi.top.sel{background:var(--active);color:var(--strong)}
+.setlist .mi:hover:not(.sel):not(.on){background:var(--hover);color:var(--text)}
+.settree{margin:2px 0 6px 20px;padding-left:0;border-left:2px solid var(--border);display:flex;flex-direction:column}
+.setlist .mi.kid{position:relative;padding:7px 14px;border-radius:0 6px 6px 0;margin-left:-2px;border-left:2px solid transparent}
+.setlist .mi.kid.on{color:var(--strong);border-left-color:var(--strong)}
+.setlist .mi.kid:hover{background:none!important;color:var(--text)}
+.setsep{height:1px;background:var(--border);margin:8px 4px;flex:none}
 .setlist .mi.danger{color:#f23f42}
 .setlist .mi.danger:hover{background:var(--hover);color:#f23f42}
+.setnone{padding:10px}
 .setver{padding:10px}
 #setBody{flex:1 1 800px;display:flex;align-items:flex-start;background:var(--main);overflow-y:auto;padding:60px 40px 80px;min-height:0;height:100%}
 .setin{flex:0 1 740px;min-width:0}
@@ -680,7 +690,7 @@ html.underline a{text-decoration:underline}
 body.spoil-all .spoiler{background:#8881;color:inherit;cursor:auto}
 body.spoil-all .spoiler *{visibility:visible}
 @media (max-width:1100px){#memberList.anowcol{display:none}}
-@media (max-width:700px){#setNav{flex:none}.setnavin{width:auto;padding:16px}#settings[open]{flex-direction:column}#setBody{padding:20px}.pcols{grid-template-columns:1fr}.vchat{display:none}.cbar{grid-template-columns:1fr}.cside{display:none}}
+@media (max-width:700px){#setNav{flex:none;height:auto;max-height:45%}.setnavin{width:100%}#settings[open]{flex-direction:column}#setBody{padding:20px}.pcols{grid-template-columns:1fr}.vchat{display:none}.cbar{grid-template-columns:1fr}.cside{display:none}}
 
 .vic{display:inline-flex;gap:3px;align-items:center;color:var(--muted)}
 .vic .ico{width:15px;height:15px}
@@ -2878,6 +2888,15 @@ const PATHS = {
   popout: "M14 4h6v6 M20 4l-9 9 M18 14v6H4V6h6",
   moreV: "M12 5h.01 M12 12h.01 M12 19h.01",
   logout: "M15 4h4v16h-4 M10 8l-4 4 4 4 M6 12h10",
+  user: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 21a8 8 0 0 1 16 0",
+  shieldLock: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z M9.5 12h5v4h-5z M10.5 12v-1.5a1.5 1.5 0 0 1 3 0V12",
+  bell: "M6 16v-5a6 6 0 0 1 12 0v5l2 2H4z M10 21h4",
+  palette: "M12 3a9 9 0 1 0 0 18c1.2 0 2-.8 2-1.8 0-1.2-1-1.5-1-2.6 0-1 .8-1.6 1.8-1.6H17a4 4 0 0 0 4-4C21 6.6 17 3 12 3z M7.5 11h.01 M10 7.5h.01 M14.5 7.5h.01",
+  a11y: "M12 6a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z M5 8.5l7 1.5 7-1.5 M12 10v5 M9 21l3-6 3 6",
+  keyboard: "M3 6h18v12H3z M7 10h.01 M11 10h.01 M15 10h.01 M7 14h10",
+  globe: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M3 12h18 M12 3a14 14 0 0 1 0 18 M12 3a14 14 0 0 0 0 18",
+  gamepad: "M6 8h12a4 4 0 0 1 4 4v1a3 3 0 0 1-5.5 1.7L15 13H9l-1.5 1.7A3 3 0 0 1 2 13v-1a4 4 0 0 1 4-4z M7 10.5v3 M5.5 12h3 M16 11h.01 M18 13h.01",
+  sparkle: "M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z",
   copy: "M8 8h12v12H8z M4 16V4h12",
   arrowRight: "M4 12h15 M13 6l6 6-6 6",
   send: "M4 12l16-8-6 16-3-7z",
@@ -3576,11 +3595,22 @@ function changeName(n) {
   send({type: "rename", name: n});
   renderUserBar(); renderSidebar();
 }
+// The settings sidebar, laid out like Discord's: sections with icons and dividers, and Account opens into a tree.
 const SETTINGS = [
-  ["User Settings", [["account", "My Account"], ["profiles", "Profiles"], ["social", "Content & Social"], ["privacy", "Data & Privacy"], ["devices", "Devices"]]],
-  ["App Settings", [["look", "Appearance"], ["a11y", "Accessibility"], ["voice", "Voice & Video"], ["chat", "Chat"], ["notify", "Notifications"],
-                    ["keys", "Keybinds"], ["lang", "Language & Time"], ["streamer", "Streamer Mode"], ["advanced", "Advanced"]]],
-  ["Activity Settings", [["activity", "Activity Privacy"]]],
+  [{icon: "user", label: "Account", kids: [["account", "My Account"], ["profiles", "Profiles"], ["devices", "Devices"]]},
+   {icon: "users", label: "Content & Social", tab: "social"},
+   {icon: "shieldLock", label: "Data & Privacy", tab: "privacy"}],
+  [{icon: "palette", label: "Appearance", tab: "look"},
+   {icon: "a11y", label: "Accessibility", tab: "a11y"},
+   {icon: "mic", label: "Voice & Video", tab: "voice"},
+   {icon: "chat", label: "Chat", tab: "chat"},
+   {icon: "bell", label: "Notifications", tab: "notify"},
+   {icon: "keyboard", label: "Keybinds", tab: "keys"},
+   {icon: "globe", label: "Language & Time", tab: "lang"},
+   {icon: "screen", label: "Streamer Mode", tab: "streamer"},
+   {icon: "gear", label: "Advanced", tab: "advanced"}],
+  [{icon: "gamepad", label: "Activity Privacy", tab: "activity"}],
+  [{icon: "sparkle", label: "What's New", tab: "new"}],
 ];
 const streamerHides = () => !!prefs.streamer?.on && prefs.streamer.hideInfo !== false;
 function stopMicTest() { micTest?.stop(); micTest = null; }
@@ -3589,25 +3619,39 @@ function openSettings(tab = setTab) {
   const d = $("#settings");
   stopMicTest();
   setTab = tab;
-  const search = h("input", {class: "setsearch", placeholder: "Search", value: setQuery, oninput: e => { setQuery = e.target.value; drawNav(); }});
+  const search = h("input", {placeholder: "Search", value: setQuery, oninput: e => { setQuery = e.target.value; drawNav(); }});
   const nav = h("div", {class: "setlist"});
   const drawNav = () => {
-    const q = setQuery.trim().toLowerCase();
-    nav.replaceChildren(...SETTINGS.flatMap(([group, items]) => {
-      const shown = items.filter(([, label]) => !q || label.toLowerCase().includes(q));
-      return shown.length ? [h("div", {class: "sub"}, group), ...shown.map(([k, label]) => h("button", {class: "mi" + (k === setTab ? " sel" : ""), onclick: () => openSettings(k)}, label)), h("div", {class: "msep"})] : [];
-    }),
-    h("button", {class: "mi", onclick: () => openSettings("new")}, "What's New"),
-    h("div", {class: "msep"}),
-    h("button", {class: "mi danger", onclick: logOut}, h("span", {}, "Log Out"), icon("logout")),
-    h("div", {class: "tiny setver"}, "LiteCord · friend-made, Nitro-free"));
+    const q = setQuery.trim().toLowerCase(), hit = label => !q || label.toLowerCase().includes(q);
+    const out = [];
+    for (const section of SETTINGS) {
+      const rows = [];
+      for (const it of section) {
+        if (!it.kids) {
+          if (hit(it.label)) rows.push(h("button", {class: "mi top" + (it.tab === tab ? " sel" : ""), onclick: () => openSettings(it.tab)}, icon(it.icon), h("span", {}, it.label)));
+          continue;
+        }
+        const kids = it.kids.filter(([, label]) => hit(label) || hit(it.label)), open = it.kids.some(([k]) => k === tab);
+        if (!kids.length) continue;
+        rows.push(h("button", {class: "mi top" + (open ? " sel" : ""), onclick: () => openSettings(it.kids[0][0])}, icon(it.icon), h("span", {}, it.label)));
+        if (open || q) rows.push(h("div", {class: "settree"}, ...kids.map(([k, label]) =>
+          h("button", {class: "mi kid" + (k === tab ? " on" : ""), onclick: () => openSettings(k)}, label))));
+      }
+      if (rows.length) out.push(...(out.length ? [h("div", {class: "setsep"})] : []), ...rows);
+    }
+    if (!out.length) out.push(h("p", {class: "tiny setnone"}, "No settings match that."));
+    nav.replaceChildren(...out, h("div", {class: "setsep"}),
+      h("button", {class: "mi top danger", onclick: logOut}, icon("logout"), h("span", {}, "Log Out")),
+      h("div", {class: "tiny setver"}, "LiteCord · friend-made, Nitro-free"));
   };
   drawNav();
-  $("#setNav").replaceChildren(h("div", {class: "setnavin"}, search, nav));
+  // The search box stays put at the top; only the list under it scrolls.
+  $("#setNav").replaceChildren(h("div", {class: "setnavin"}, h("label", {class: "setsearch"}, icon("search"), search), nav));
   $("#setBody").replaceChildren(h("div", {class: "setin"}, ...settingsPage(tab)),
     h("div", {class: "setclose"}, h("button", {class: "closex", "data-tip": "Close", onclick: () => d.close()}, icon("x")), h("span", {}, "ESC")));
   if (!d.open) { d.showModal(); document.body.classList.add("setopen"); }
   $("#setBody").scrollTop = 0;
+  nav.querySelector(".kid.on, .top.sel")?.scrollIntoView({block: "nearest"});
 }
 $("#settings").addEventListener("close", () => { stopMicTest(); stopCamTest(); document.body.classList.remove("setopen"); });
 function radio(name, value, current, label, onpick, desc) {
