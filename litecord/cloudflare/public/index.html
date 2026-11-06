@@ -17,7 +17,8 @@
 :root{--accent:#5865f2;--green:#23a55a;--red:#da373c;--yellow:#f0b232;--fs:15px;--gap:14px}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
-html,body{margin:0;height:100%;background:var(--main);color:var(--text);font:var(--fs)/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+html,body{margin:0;height:100%;background:var(--main);color:var(--text);font:var(--fs)/1.4 var(--font)}
+:root{--font:system-ui,-apple-system,"Segoe UI","Noto Sans",Roboto,"Helvetica Neue",Arial,"Noto Sans CJK JP","Noto Sans JP","Source Han Sans JP","Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Yu Gothic","Meiryo UI",Meiryo,"Noto Sans CJK KR","Malgun Gothic","Noto Sans CJK SC","Microsoft YaHei UI","Noto Color Emoji","Segoe UI Emoji","Apple Color Emoji",sans-serif}
 html.reduce *{transition:none!important;animation:none!important;scroll-behavior:auto!important}
 button,select,input,textarea{font:inherit;color:inherit}
 a{color:#00a8fc}
@@ -151,8 +152,8 @@ main{display:flex;flex-direction:column;min-height:0;min-width:0;background:var(
 .att-img{max-width:min(400px,100%);max-height:300px;border-radius:6px;display:block;margin-top:4px}
 .att-vid{max-width:min(480px,100%);max-height:320px;border-radius:6px;display:block;margin-top:4px;background:#000}
 .att-file{display:inline-flex;gap:6px;margin-top:4px;padding:10px 12px;background:var(--side);border:1px solid var(--border);border-radius:6px;text-decoration:none}
-.icode{background:var(--code);border-radius:3px;padding:1px 4px;font:.85em/1.3 ui-monospace,Consolas,monospace}
-.codeblock{background:var(--code);border:1px solid var(--border);border-radius:4px;padding:8px 10px;margin:4px 0;white-space:pre-wrap;word-break:break-word;font:.85em/1.45 ui-monospace,Consolas,monospace;max-width:100%}
+.icode{background:var(--code);border-radius:3px;padding:1px 4px;font:.85em/1.3 ui-monospace,Consolas,"DejaVu Sans Mono",monospace,"Noto Sans CJK JP","Yu Gothic UI",Meiryo}
+.codeblock{background:var(--code);border:1px solid var(--border);border-radius:4px;padding:8px 10px;margin:4px 0;white-space:pre-wrap;word-break:break-word;font:.85em/1.45 ui-monospace,Consolas,"DejaVu Sans Mono",monospace,"Noto Sans CJK JP","Yu Gothic UI",Meiryo;max-width:100%}
 .quote{border-left:4px solid var(--btn2);padding-left:10px;margin:2px 0}
 .spoiler{background:var(--rail);border-radius:3px;cursor:pointer;color:transparent;padding:0 2px}
 .spoiler *{visibility:hidden}
@@ -589,10 +590,10 @@ main{overflow:hidden}
 .tdots i:nth-child(2){animation-delay:.15s} .tdots i:nth-child(3){animation-delay:.3s}
 
 /* ---- full-screen settings ---- */
-#settings{width:100vw;height:100vh;max-width:none;max-height:none;margin:0;border-radius:0;padding:0;background:var(--main)}
+#settings{position:fixed;inset:0;width:auto;height:auto;max-width:none;max-height:none;margin:0;border-radius:0;padding:0;background:var(--main)}
 #settings[open]{display:flex;animation:setIn .25s var(--ease)}
 #settings::backdrop{background:transparent}
-#setNav{flex:1 0 218px;display:flex;justify-content:flex-end;background:var(--side);padding:0;overflow:auto}
+#setNav{flex:1 0 218px;display:flex;justify-content:flex-end;background:var(--side);padding:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin}
 .setnavin{width:232px;padding:60px 6px 40px 20px}
 .setsearch{padding:6px 8px;font-size:14px;margin-bottom:8px}
 .setlist{display:grid;gap:2px}
@@ -1961,15 +1962,18 @@ function openPop(content, anchor, x = 0, y = 0) {
   closePop();
   pop = h("div", {class: "pop"}, content);
   document.body.append(pop);
-  const r = anchor ? anchor.getBoundingClientRect() : {left: x, top: y, bottom: y};
+  // Screen positions are in real pixels; with zoom on, CSS pixels are bigger, so convert.
+  const z = zoomNow(), b = anchor ? anchor.getBoundingClientRect() : {left: x, top: y, bottom: y};
+  const r = {left: b.left / z, top: b.top / z, bottom: b.bottom / z}, W = innerWidth / z, H = innerHeight / z;
   const w = pop.offsetWidth, ht = pop.offsetHeight;
   let top = r.bottom + 6;
-  if (top + ht > innerHeight - 8) top = Math.max(8, r.top - ht - 6);
-  pop.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + "px";
+  if (top + ht > H - 8) top = Math.max(8, r.top - ht - 6);
+  pop.style.left = Math.max(8, Math.min(r.left, W - w - 8)) + "px";
   pop.style.top = top + "px";
   return pop;
 }
 function closePop() { pop?.remove(); pop = null; }
+const zoomNow = () => parseFloat(document.documentElement.style.zoom) || 1;
 addEventListener("mousedown", e => { if (pop && !pop.contains(e.target)) closePop(); }, true);
 addEventListener("keydown", e => { if (e.key === "Escape") closePop(); });
 function menu(items, x, y) {
@@ -3541,10 +3545,11 @@ function applyLook() {
   root.style.setProperty("--fs", (prefs.fs || 15) + "px");
   root.style.setProperty("--gap", (prefs.gap ?? 14) + "px");
   document.body.classList.toggle("compact", !!prefs.compact);
-  // Zoom scales only the main app, never menus or Settings, so a bad zoom can always be undone.
-  const z = Math.min(1.5, Math.max(0.8, +prefs.zoom || 1));
+  // Zoom scales the whole page, like Discord's. It's applied when you let go of the slider, and Reset is always there.
+  const z = Math.min(2, Math.max(0.8, +prefs.zoom || 1));
   document.body.style.zoom = "";
-  $("#app").style.zoom = z !== 1 ? String(z) : "";
+  $("#app").style.zoom = "";
+  root.style.zoom = z !== 1 ? String(z) : "";
   const meta = document.querySelector("meta[name=theme-color]");
   if (meta) meta.content = getComputedStyle(root).getPropertyValue("--rail").trim() || "#121214";
 }
@@ -3610,8 +3615,8 @@ function slider(min, max, step, value, fmt, oninput) {
   return h("div", {class: "vrow"}, s, l);
 }
 function zoomControl() {
-  const steps = [80, 90, 100, 110, 125, 150];
-  const cur = Math.round((Math.min(1.5, Math.max(0.8, +prefs.zoom || 1))) * 100);
+  const steps = [80, 90, 100, 110, 125, 150, 175, 200];
+  const cur = Math.round((Math.min(2, Math.max(0.8, +prefs.zoom || 1))) * 100);
   const s = h("input", {type: "range", min: 0, max: steps.length - 1, step: 1, value: Math.max(0, steps.indexOf(cur))});
   const label = h("span", {class: "tiny"}, cur + "%");
   const paint = () => s.style.setProperty("--p", (s.value / (steps.length - 1) * 100) + "%");
@@ -5034,7 +5039,9 @@ function showTip(el) {
   const side = el.dataset.tipSide || "top";
   tipEl = h("div", {class: "tip " + side}, el.dataset.tip);
   document.body.append(tipEl);
-  const r = el.getBoundingClientRect(), w = tipEl.offsetWidth, ht = tipEl.offsetHeight;
+  const z = zoomNow(), b = el.getBoundingClientRect(), w = tipEl.offsetWidth, ht = tipEl.offsetHeight;
+  const r = {left: b.left / z, right: b.right / z, top: b.top / z, bottom: b.bottom / z, width: b.width / z, height: b.height / z};
+  const innerWidth = window.innerWidth / z;
   let x, y;
   if (side === "right") { x = r.right + 12; y = r.top + r.height / 2 - ht / 2; }
   else { x = r.left + r.width / 2 - w / 2; y = r.top - ht - 8; if (y < 4) { y = r.bottom + 8; tipEl.classList.replace("top", "bottom"); } }
