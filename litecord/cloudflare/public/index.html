@@ -4428,7 +4428,8 @@ function requestFriend(uid, name) {
   mail([uid], {t: "freq", n: myName});
   saveSocial(); renderHomeSoon();
   if (isDM(view?.ch)) refreshMessages();
-  return [true, `Success! Your friend request to ${friends[uid].name} was sent.`];
+  const who = friends[uid].name === "Someone" ? "" : ` to ${friends[uid].name}`;
+  return [true, `Success! Your friend request${who} was sent.`];
 }
 function acceptFriend(uid) {
   if (!friends[uid]) return;
