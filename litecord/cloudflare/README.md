@@ -102,3 +102,24 @@ Firefox can't install web apps on Linux or Mac, but the site still works fine in
 - `public/manifest.webmanifest`, `public/sw.js`, `public/icon*`: make it installable as an app
 - `public/voice-gate.js`: voice activity and push-to-talk (runs on the audio thread)
 - `public/vendor/noise/`: open-source AI noise suppression models (MIT license, see its README)
+
+
+## Friends, DMs and group chats
+
+Click the speech-bubble button at the top left. Add friends with their username or friend code
+(Settings → My Account), then message them, start group chats (up to 10 people), or call them.
+DMs reach friends even when they're offline: they wait in a small mailbox on Cloudflare for up to
+30 days and are deleted there once picked up.
+
+## Calls on strict networks (optional relay)
+
+Calls go straight between browsers. Some home, school or phone networks block that, and then
+people can't hear each other. Cloudflare has a free relay (TURN) for exactly this:
+
+1. In the Cloudflare dashboard open **Realtime → TURN Server → Create**, and copy the
+   **Turn Token ID** and **API Token**.
+2. In this folder run:
+   `npx wrangler secret put TURN_KEY_ID` (paste the token ID), then
+   `npx wrangler secret put TURN_KEY_TOKEN` (paste the API token).
+
+That's it. The relay only passes along the encrypted audio and video when a direct connection fails.

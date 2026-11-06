@@ -30,6 +30,7 @@ export default {
       if (!UID.test(uid)) return new Response("bad id", { status: 400 });
       return inbox(env, uid).fetch(request);
     }
+    if (url.pathname === "/api/ice") return iceServers(env);
     if (url.pathname === "/api/username" && request.method === "POST") return setUsername(request, env);
     if (url.pathname === "/api/lookup") {
       const name = (url.searchParams.get("name") || "").toLowerCase();
@@ -39,6 +40,31 @@ export default {
     return env.ASSETS.fetch(request);
   },
 };
+
+/* ---------- relay servers for calls (TURN) ---------- */
+// Some home and school networks block direct browser-to-browser calls. A TURN server passes the
+// (still encrypted) audio and video along when that happens. Cloudflare's is free for normal use:
+// set the secrets TURN_KEY_ID and TURN_KEY_TOKEN (see README) and calls use it automatically.
+const STUN = [{ urls: ["stun:stun.cloudflare.com:3478", "stun:stun.l.google.com:19302"] }];
+let iceCache = null;
+async function iceServers(env) {
+  const headers = { "cache-control": "no-store" };
+  if (!env.TURN_KEY_ID || !env.TURN_KEY_TOKEN) return Response.json({ iceServers: STUN, turn: false }, { headers });
+  if (iceCache && iceCache.until > Date.now()) return Response.json(iceCache.body, { headers });
+  try {
+    const r = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${env.TURN_KEY_ID}/credentials/generate-ice-servers`, {
+      method: "POST", headers: { authorization: `Bearer ${env.TURN_KEY_TOKEN}`, "content-type": "application/json" }, body: JSON.stringify({ ttl: 86400 }),
+    });
+    if (!r.ok) throw new Error("TURN " + r.status);
+    const j = await r.json();
+    const list = Array.isArray(j.iceServers) ? j.iceServers : j.iceServers ? [j.iceServers] : [];
+    const body = { iceServers: [...STUN, ...list], turn: true };
+    iceCache = { body, until: Date.now() + 6 * 3600e3 };  // credentials last a day; refresh well before that
+    return Response.json(body, { headers });
+  } catch (err) {
+    return Response.json({ iceServers: STUN, turn: false, error: String(err.message || err) }, { headers });
+  }
+}
 
 /* ---------- friends and direct messages ---------- */
 const UID = /^[0-9a-f]{16}$/;
