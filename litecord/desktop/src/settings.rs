@@ -298,7 +298,7 @@ impl LiteCord {
                 )
                 .child(div().text_xs().font_weight(FontWeight::BOLD).text_color(c_muted()).child("ESC")),
             );
-        div().size_full().flex().bg(c_main()).child(sidebar).child(div().flex_1().flex().bg(c_main()).child(content))
+        div().size_full().flex().bg(c_main()).child(sidebar).child(div().flex_1().flex().justify_center().bg(c_main()).child(content))
     }
 
     fn page_account(&mut self, cx: &mut Context<Self>) -> Div {
