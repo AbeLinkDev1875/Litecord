@@ -192,25 +192,26 @@ impl LiteCord {
             if i > 0 {
                 list = list.child(div().mx(u(10.)).my(u(8.)).h(px(1.)).bg(c_border()));
             }
-            list = list.child(div().px(u(10.)).pt(u(6.)).pb(u(4.)).text_xs().font_weight(FontWeight::BOLD).text_color(c_muted()).child(title.to_uppercase()));
+            let _ = title;
             for it in items {
                 let on = it.page == page;
                 let p = it.page;
                 list = list.child(
                     div()
                         .id(SharedString::from(format!("set-{:?}", it.page)))
-                        .h(u(34.))
-                        .px(u(10.))
-                        .rounded(u(6.))
+                        .h(u(44.))
+                        .px(u(12.))
+                        .rounded(u(8.))
                         .flex()
                         .items_center()
-                        .gap(u(10.))
+                        .gap(u(14.))
                         .cursor_pointer()
+                        .text_size(u(16.))
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(if on { c_strong() } else { c_muted() })
                         .when(on, |d| d.bg(c_active()))
                         .hover(|d| d.bg(c_hover()).text_color(c_text()))
-                        .child(Icon::new(it.icon).size(u(18.)))
+                        .child(Icon::new(it.icon).size(u(22.)))
                         .child(it.label)
                         .on_click(cx.listener(move |this, _, window, cx| this.open_settings(p, window, cx))),
                 );
@@ -220,17 +221,18 @@ impl LiteCord {
             list = list.child(div().mx(u(10.)).my(u(8.)).h(px(1.)).bg(c_border())).child(
                 div()
                     .id("logout")
-                    .h(u(34.))
-                    .px(u(10.))
-                    .rounded(u(6.))
+                    .h(u(44.))
+                    .px(u(12.))
+                    .rounded(u(8.))
                     .flex()
                     .items_center()
-                    .gap(u(10.))
+                    .gap(u(14.))
                     .cursor_pointer()
+                    .text_size(u(16.))
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(c_red())
                     .hover(|d| d.bg(c_red().opacity(0.1)))
-                    .child(Icon::new(IconName::ArrowLeft).size(u(18.)))
+                    .child(Icon::new(IconName::ArrowLeft).size(u(22.)))
                     .child(if self.logout_armed { "Click again to log out" } else { "Log Out" })
                     .on_click(cx.listener(|this, _, _, cx| {
                         if this.logout_armed {
@@ -245,21 +247,19 @@ impl LiteCord {
         list = list.child(div().px(u(10.)).pt(u(12.)).text_xs().text_color(c_muted()).child(format!("LiteCord Desktop {}", env!("CARGO_PKG_VERSION"))));
 
         let sidebar = div()
-            .flex_1()
-            .min_w(u(218.))
+            .w(u(300.))
+            .flex_none()
             .h_full()
             .bg(c_side())
-            .flex()
-            .justify_end()
             .child(
                 div()
-                    .w(u(232.))
+                    .w_full()
                     .h_full()
-                    .pt(u(48.))
-                    .pl(u(12.))
+                    .pt(u(24.))
+                    .pl(u(14.))
                     .flex()
                     .flex_col()
-                    .child(div().pr(u(12.)).pb(u(10.)).flex_none().child(Input::new(&self.settings_search).prefix(Icon::new(IconName::Search).size(u(14.)).text_color(c_muted())).cleanable(true)))
+                    .child(div().pr(u(14.)).pb(u(14.)).flex_none().child(Input::new(&self.settings_search).prefix(Icon::new(IconName::Search).size(u(14.)).text_color(c_muted())).cleanable(true)))
                     .child(list),
             );
 
@@ -278,9 +278,9 @@ impl LiteCord {
             .max_w(u(800.))
             .h_full()
             .flex()
-            .child(div().id("setpage").flex_1().min_w(px(0.)).h_full().overflow_y_scroll().pt(u(60.)).px(u(40.)).pb(u(80.)).child(body))
+            .child(div().id("setpage").flex_1().min_w(px(0.)).h_full().overflow_y_scroll().pt(u(40.)).px(u(56.)).pb(u(80.)).child(body))
             .child(
-                div().w(u(72.)).pt(u(60.)).flex_none().flex().flex_col().items_center().gap(u(6.)).child(
+                div().w(u(72.)).pt(u(40.)).flex_none().flex().flex_col().items_center().gap(u(6.)).child(
                     div()
                         .id("closeset")
                         .size(u(36.))
