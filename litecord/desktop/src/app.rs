@@ -1304,6 +1304,7 @@ impl LiteCord {
         let dm_key = key.clone();
         let head = self.header(
             div()
+                .flex_1()
                 .flex()
                 .items_center()
                 .gap(u(10.))
@@ -1315,7 +1316,13 @@ impl LiteCord {
                 .children(other.as_ref().map(|id| {
                     let sub = store.subline(id);
                     div().text_sm().text_color(c_muted()).child(if sub.is_empty() { status_label(store.status_of(id)).to_string() } else { sub })
-                })),
+                }))
+                // Calls run in the browser for now: this opens the DM's call room there and rings everyone.
+                .child(div().flex_1())
+                .child({
+                    let url = format!("{SERVER}/?room=dm-{}&call=1&ring=1", store.me.dms.get(&key).map(|d| d.cid.clone()).unwrap_or_default());
+                    Button::new("call").primary().small().label("Start Call (opens browser)").on_click(move |_, _, cx| cx.open_url(&url))
+                }),
         );
         let row_count = rows.len();
         let scroller = MessageScroller::new("msgs", self.scroller.clone(), move |ix, _, _| {
