@@ -1590,6 +1590,8 @@ impl Render for LiteCord {
                 )
             }));
         // On Linux with LiteCord's own frame, this adds the soft shadow and the edges you drag to resize.
-        window_border().child(app)
+        // On Linux with LiteCord's own frame: a thin edge you can drag to resize (no shadow band,
+        // which KDE drew as a thick dark frame).
+        window_border().shadow_size(px(0.)).child(app)
     }
 }

@@ -26,7 +26,7 @@ fn main() {
             // border and shadow are too (Linux). Otherwise the system draws them.
             titlebar: Some(TitlebarOptions { title: Some("LiteCord".into()), appears_transparent: custom, ..Default::default() }),
             window_decorations: Some(if custom { WindowDecorations::Client } else { WindowDecorations::Server }),
-            window_background: if cfg!(target_os = "linux") { WindowBackgroundAppearance::Transparent } else { WindowBackgroundAppearance::Opaque },
+            window_background: WindowBackgroundAppearance::Opaque,
             app_owns_titlebar_drag: true,
             app_id: Some("litecord".into()),
             window_min_size: Some(gpui_kit::size(px(800.), px(500.))),
