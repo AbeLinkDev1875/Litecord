@@ -123,6 +123,9 @@ pub struct Saved {
     pub dms: BTreeMap<String, Dm>,
     #[serde(default)]
     pub msgs: HashMap<String, Vec<Msg>>,
+    /// Your claimed username (friends can add you by it), if any.
+    #[serde(default)]
+    pub username: String,
     /// The DM that was open last time ("" for the Friends page), so it reopens like Discord.
     #[serde(default)]
     pub last_view: String,
@@ -144,6 +147,9 @@ pub struct Store {
     pub outbox: Vec<String>,
     seen_mail: std::collections::HashSet<i64>,
     path: PathBuf,
+    /// "online", "idle", "dnd" or "invisible", and the custom status text (from Prefs).
+    pub status: String,
+    pub custom: String,
 }
 
 pub fn data_dir() -> PathBuf {
@@ -175,6 +181,8 @@ impl Store {
             outbox: Vec::new(),
             seen_mail: Default::default(),
             path,
+            status: "online".into(),
+            custom: String::new(),
         }
     }
 
@@ -210,7 +218,8 @@ impl Store {
                 }
             }
         }
-        let me = Saved { uid, key, name, friends: friends.into_iter().filter(|(u, _)| is_uid(u)).collect(), dms, ..Default::default() };
+        let username = v["username"].as_str().unwrap_or_default().to_string();
+        let me = Saved { uid, key, name, username, friends: friends.into_iter().filter(|(u, _)| is_uid(u)).collect(), dms, ..Default::default() };
         let s = Store::from_saved(me, data_dir().join("state.json"));
         s.save();
         Ok(s)
@@ -274,9 +283,29 @@ impl Store {
         }
     }
 
+    /// What friends see. Invisible means nothing at all, so you look offline.
     fn my_presence(&self) -> Value {
-        json!({"status": "online", "name": self.me.name, "custom": "", "act": "", "live": false,
+        if self.status == "invisible" {
+            return Value::Null;
+        }
+        json!({"status": self.status, "name": self.me.name, "custom": self.custom, "act": "", "live": false,
                "pf": {"about": "", "pronouns": "", "color": -1, "banner": -1}})
+    }
+
+    pub fn set_status(&mut self, status: &str, custom: &str) {
+        self.status = status.to_string();
+        self.custom = custom.chars().take(128).collect();
+        self.outbox.push(json!({"type": "presence", "presence": self.my_presence()}).to_string());
+    }
+
+    pub fn rename(&mut self, name: &str) {
+        let name: String = name.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(32).collect();
+        if name.is_empty() || name == self.me.name {
+            return;
+        }
+        self.me.name = name;
+        self.outbox.push(json!({"type": "presence", "presence": self.my_presence()}).to_string());
+        self.save();
     }
 
     pub fn hello(&self) -> String {

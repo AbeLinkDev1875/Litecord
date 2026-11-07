@@ -126,6 +126,23 @@ pub fn lookup(base: &str, name: &str) -> Result<Option<String>, String> {
     Ok(v.get("uid").and_then(|u| u.as_str()).map(String::from))
 }
 
+/// Claims a username for this account (or frees it with ""). Returns Ok or the reason it failed.
+pub fn set_username(base: &str, uid: &str, key: &str, name: &str) -> Result<(), String> {
+    let body = serde_json::json!({"uid": uid, "key": key, "name": name});
+    let res = ureq::post(&format!("{base}/api/username")).config().http_status_as_error(false).build().send_json(&body);
+    let mut res = res.map_err(|_| "Couldn't reach the server. Try again in a moment.".to_string())?;
+    let v: serde_json::Value = res.body_mut().read_json().unwrap_or_default();
+    if v["ok"].as_bool() == Some(true) {
+        return Ok(());
+    }
+    Err(match v["error"].as_str() {
+        Some("taken") => "That username is taken. Try another one.".into(),
+        Some("bad name") => "Usernames are 2–32 characters: lowercase letters, numbers, _ and .".into(),
+        Some("not yours") => "The server didn't accept this account's key.".into(),
+        _ => "Couldn't save that username. Try again in a moment.".into(),
+    })
+}
+
 fn urlencode(s: &str) -> String {
     s.bytes()
         .map(|b| match b {

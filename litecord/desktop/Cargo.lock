@@ -3483,6 +3483,7 @@ dependencies = [
  "dirs 7.0.0",
  "futures-util",
  "gpui-kit",
+ "notify-rust",
  "rand 0.10.3",
  "serde",
  "serde_json",
