@@ -350,6 +350,13 @@ impl LiteCord {
         set_theme(&self.prefs.theme);
         set_scale(self.prefs.zoom);
         Theme::change(if pal().light { ThemeMode::Light } else { ThemeMode::Dark }, None, cx);
+        // Blurple main buttons, like the web app (GPUI Kit's dark theme makes them white).
+        Theme::update(cx, |t| {
+            t.primary = c_accent();
+            t.primary_hover = rgb(0x4752c4).into();
+            t.primary_active = rgb(0x3c45a5).into();
+            t.primary_foreground = white();
+        });
         self.scroller.update(cx, |s, cx| s.remeasure(cx));
         cx.notify();
     }

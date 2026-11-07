@@ -98,7 +98,7 @@ fn section(title: &'static str) -> Div {
         .flex()
         .flex_col()
         .gap(u(10.))
-        .when(!title.is_empty(), |d| d.child(div().text_xs().font_weight(FontWeight::BOLD).text_color(c_muted()).child(title)))
+        .when(!title.is_empty(), |d| d.child(div().text_size(u(17.)).font_weight(FontWeight::BOLD).text_color(c_muted()).child(title)))
 }
 
 fn note(t: impl Into<SharedString>) -> Div {
@@ -304,26 +304,39 @@ impl LiteCord {
     fn page_account(&mut self, cx: &mut Context<Self>) -> Div {
         let Some(store) = &self.store else { return div() };
         let (uid, name, username) = (store.me.uid.clone(), store.me.name.clone(), store.me.username.clone());
+        let status = self.prefs.status.clone();
+        let custom = self.prefs.custom.clone();
+        let mut handle = if username.is_empty() { "No username yet".to_string() } else { format!("@{username}") };
+        if !custom.is_empty() {
+            handle = format!("{handle} • {custom}");
+        }
         let card = div()
-            .rounded(u(8.))
+            .rounded(u(10.))
             .overflow_hidden()
             .bg(c_panel())
-            .mb(u(24.))
-            .child(div().h(u(100.)).bg(hsla(hue(&uid) / 360., 0.45, 0.40, 1.)))
+            .mb(u(28.))
+            .child(div().h(u(110.)).bg(hsla(((hue(&uid) + 180.) % 360.) / 360., 0.40, 0.33, 1.)))
             .child(
                 div()
-                    .px(u(16.))
-                    .pb(u(16.))
+                    .px(u(18.))
+                    .pb(u(18.))
                     .flex()
-                    .items_end()
-                    .gap(u(16.))
-                    .child(div().mt(u(-40.)).rounded_full().border(u(6.)).border_color(c_panel()).child(avatar(&uid, &name, 80.)))
+                    .flex_col()
+                    .child(
+                        div().mt(u(-48.)).size(u(92.)).rounded_full().bg(c_panel()).flex().items_center().justify_center().child(crate::app::avatar_dot(&uid, &name, 80., if status == "invisible" { "offline" } else { status.as_str() }, c_panel())),
+                    )
                     .child(
                         div()
+                            .mt(u(8.))
+                            .p(u(16.))
+                            .rounded(u(8.))
+                            .bg(c_main())
                             .flex()
                             .flex_col()
-                            .child(div().text_xl().font_weight(FontWeight::BOLD).text_color(c_strong()).child(name.clone()))
-                            .child(note(if username.is_empty() { "No username yet".to_string() } else { username.clone() })),
+                            .gap(u(4.))
+                            .child(div().text_2xl().font_weight(FontWeight::BOLD).text_color(c_strong()).child(name.clone()))
+                            .child(div().text_color(c_text()).child(handle))
+                            .child(note(crate::app::status_label(&status))),
                     ),
             );
         let msg = self.account_msg.clone();
