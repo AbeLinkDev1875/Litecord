@@ -1,0 +1,30 @@
+# Builds the LiteCord desktop app for Linux and Windows on every push that touches it.
+# Download the results from the Actions tab: open a run, then "Artifacts" at the bottom.
+name: Desktop app
+on:
+  push:
+    paths: ["litecord/desktop/**", ".github/workflows/desktop.yml"]
+  workflow_dispatch:
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, file: litecord, name: litecord-linux }
+          - { os: windows-latest, file: litecord.exe, name: litecord-windows }
+    runs-on: ${{ matrix.os }}
+    defaults: { run: { working-directory: litecord/desktop } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: litecord/desktop }
+      - name: Linux build tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libvulkan-dev libx11-xcb-dev libxcb1-dev libfontconfig-dev libfreetype-dev libssl-dev libdbus-1-dev pkg-config
+      - run: cargo build --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: litecord/desktop/target/release/${{ matrix.file }}
