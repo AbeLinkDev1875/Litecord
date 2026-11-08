@@ -969,5 +969,19 @@ mod tests {
         let key = format!("g:{gid}");
         assert!(s.me.dms[&key].group);
         assert_eq!(s.dm_title(&key), "Bob");
+        // Group calls: the ring carries the group (key and members) and the group's call room.
+        s.outbox.clear();
+        s.ring(&key, &[BOB.to_string()], true);
+        let v: Value = serde_json::from_str(&s.outbox[0]).unwrap();
+        assert_eq!(v["body"]["k"], gid);
+        assert_eq!(v["body"]["cid"], gid);
+        assert!(v["body"]["g"]["members"].get(BOB).is_some());
+        // Someone else in the group rings us: the card is for the group.
+        let carol = "cccccccccccccccc";
+        let g2 = json!({"name": "", "members": {BOB: "Bob", "aaaaaaaaaaaaaaaa": "Me", carol: "Carol"}, "owner": BOB});
+        s.on_text(&mail(carol, 2, json!({"t": "ring", "n": "Carol", "k": gid, "g": g2, "cid": gid})));
+        assert!(s.ringing.is_none(), "Carol isn't in our copy of the group yet");
+        s.on_text(&mail(BOB, 3, json!({"t": "ring", "n": "Bob", "k": gid, "g": g, "cid": gid})));
+        assert_eq!(s.ringing.as_ref().map(|r| r.key.clone()), Some(key));
     }
 }
