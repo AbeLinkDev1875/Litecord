@@ -22,7 +22,15 @@ jobs:
         with: { workspaces: litecord/desktop }
       - name: Linux build tools
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libvulkan-dev libx11-xcb-dev libxcb1-dev libfontconfig-dev libfreetype-dev libssl-dev libdbus-1-dev pkg-config
+        # Calls: ALSA (microphone and speakers), GLib (screen share portal), and clang 21+,
+        # which the prebuilt libwebrtc's own libc++ needs.
+        run: |
+          sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libvulkan-dev libx11-xcb-dev libxcb1-dev libfontconfig-dev libfreetype-dev libssl-dev libdbus-1-dev pkg-config libasound2-dev libglib2.0-dev
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s 21
+          echo "CXX=clang++-21" >> "$GITHUB_ENV"
+      - name: Tests (Linux)
+        if: runner.os == 'Linux'
+        run: cargo test --release
       - run: cargo build --release
       - uses: actions/upload-artifact@v4
         with:

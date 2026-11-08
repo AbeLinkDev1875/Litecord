@@ -121,6 +121,8 @@ fn clock(ts: i64, h24: bool) -> String {
 pub enum View {
     Friends(Tab),
     Dm(String),
+    /// A server (relay room) by name.
+    Server(String),
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -169,10 +171,22 @@ pub struct LiteCord {
     scroller: Entity<MessageScrollerState>,
     rows: Rc<Vec<Row>>,
     toast: Option<(String, i64)>,
-    last_typing: i64,
+    pub(crate) last_typing: i64,
     active: bool,
     pub(crate) drag_armed: bool,
     window_title: String,
+    pub(crate) call: crate::callui::CallUi,
+    /// Video pictures that were replaced, to free on the GPU at the next frame.
+    pub(crate) old_images: Vec<std::sync::Arc<RenderImage>>,
+    pub(crate) server: crate::servers::ServerUi,
+    pub(crate) server_name_input: Entity<InputState>,
+    pub(crate) server_composer: Entity<InputState>,
+    pub(crate) server_scroller: Entity<MessageScrollerState>,
+    pub(crate) server_rows: Rc<Vec<(crate::call::ChatView, bool)>>,
+    pub(crate) server_rows_for: Option<String>,
+    pub(crate) server_rows_len: usize,
+    /// Microphones and speakers found (for Settings › Voice & Video).
+    pub(crate) audio_devices: Option<(Vec<String>, Vec<String>)>,
     _subs: Vec<Subscription>,
 }
 
@@ -187,6 +201,9 @@ impl LiteCord {
         let username_input = cx.new(|cx| InputState::new(window, cx).placeholder("username"));
         let settings_search = cx.new(|cx| InputState::new(window, cx).placeholder("Search"));
         let scroller = cx.new(|cx| MessageScrollerState::new(0, cx));
+        let server_name_input = cx.new(|cx| InputState::new(window, cx).placeholder("lobby"));
+        let server_composer = cx.new(|cx| InputState::new(window, cx).placeholder("Message"));
+        let server_scroller = cx.new(|cx| MessageScrollerState::new(0, cx));
 
         let mut subs = Vec::new();
         subs.push(cx.subscribe_in(&composer, window, |this, input, ev: &InputEvent, window, cx| match ev {
@@ -211,6 +228,16 @@ impl LiteCord {
                     }
                 }
             }
+            _ => {}
+        }));
+        subs.push(cx.subscribe_in(&server_name_input, window, |this, _, ev: &InputEvent, window, cx| {
+            if let InputEvent::PressEnter { .. } = ev {
+                this.submit_add_server(window, cx);
+            }
+        }));
+        subs.push(cx.subscribe_in(&server_composer, window, |this, input, ev: &InputEvent, window, cx| match ev {
+            InputEvent::PressEnter { shift: false, .. } => this.send_server_message(input, window, cx),
+            InputEvent::Change if !input.read(cx).value().is_empty() => this.server_typing(cx),
             _ => {}
         }));
         subs.push(cx.subscribe_in(&add_input, window, |this, _, ev: &InputEvent, window, cx| {
@@ -293,6 +320,16 @@ impl LiteCord {
             active: true,
             drag_armed: false,
             window_title: String::new(),
+            call: Default::default(),
+            old_images: Vec::new(),
+            server: Default::default(),
+            server_name_input,
+            server_composer,
+            server_scroller,
+            server_rows: Rc::new(Vec::new()),
+            server_rows_for: None,
+            server_rows_len: 0,
+            audio_devices: None,
             _subs: subs,
         };
         app.apply_look(cx);
@@ -399,7 +436,16 @@ impl LiteCord {
                 }
             }
             NetEvent::Text(t) => {
+                let was_ringing = store.ringing.as_ref().map(|r| r.from.clone());
                 let touched = store.on_text(&t);
+                if let Some(r) = store.ringing.as_ref().filter(|r| Some(&r.from) != was_ringing.as_ref()) {
+                    if self.prefs.notify && self.prefs.status != "dnd" {
+                        let body = if r.video { format!("{} is video calling you", r.name) } else { format!("{} is calling you", r.name) };
+                        std::thread::spawn(move || {
+                            let _ = notify_rust::Notification::new().appname("LiteCord").summary("Incoming call").body(&body).show();
+                        });
+                    }
+                }
                 let mut alert = Vec::new();
                 for k in touched {
                     let looking = self.active && self.view == View::Dm(k.clone()) && self.settings.is_none();
@@ -476,6 +522,7 @@ impl LiteCord {
         if self.prefs_dirty {
             self.save_prefs();
         }
+        dirty |= self.call_tick();
         if dirty {
             cx.notify();
         }
@@ -735,11 +782,15 @@ impl LiteCord {
             .into_any_element()
     }
 
-    fn render_rail(&self, cx: &mut Context<Self>) -> Div {
+    fn render_rail(&self, cx: &mut Context<Self>) -> Stateful<Div> {
         let unread: usize = self.store.as_ref().map(|s| s.unread.values().sum()).unwrap_or(0);
         let pending = self.store.as_ref().map(|s| s.me.friends.values().filter(|f| f.state == FriendState::In).count()).unwrap_or(0);
         let badge = unread + pending;
+        let home = !matches!(self.view, View::Server(_));
+        let servers = self.rail_servers(cx);
         div()
+            .id("rail")
+            .overflow_y_scroll()
             .w(u(72.))
             .flex_none()
             .h_full()
@@ -756,7 +807,7 @@ impl LiteCord {
                     .flex()
                     .justify_center()
                     // The white pill on the left edge, like Discord's selected-server marker.
-                    .child(div().absolute().left_0().top(u(4.)).w(u(4.)).h(u(40.)).rounded_r(u(4.)).bg(c_strong()))
+                    .when(home, |d| d.child(div().absolute().left_0().top(u(4.)).w(u(4.)).h(u(40.)).rounded_r(u(4.)).bg(c_strong())))
                     .child(
                         div()
                             .id("home")
@@ -798,25 +849,14 @@ impl LiteCord {
                     ),
             )
             .child(div().w(u(32.)).h(u(2.)).rounded_full().bg(c_active()))
-            .child(
-                div()
-                    .id("servers")
-                    .size(u(48.))
-                    .rounded(u(24.))
-                    .bg(c_side())
-                    .text_color(c_green())
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .hover(|d| d.rounded(u(16.)).bg(c_green()).text_color(white()))
-                    .child(Icon::new(IconName::Globe).size(u(22.)))
-                    .tooltip(|window, cx| gpui_kit::component::tooltip::Tooltip::new("Servers open in your browser for now").build(window, cx))
-                    .on_click(|_, _, cx| cx.open_url(SERVER)),
-            )
+            .children(servers)
     }
 
     fn render_sidebar(&self, cx: &mut Context<Self>) -> Div {
+        let server_side = match &self.view {
+            View::Server(r) => Some(self.server_sidebar(r, cx)),
+            _ => None,
+        };
         let store = self.store.as_ref().unwrap();
         let friends_on = matches!(self.view, View::Friends(_));
         let pending = store.me.friends.values().filter(|f| f.state == FriendState::In).count();
@@ -918,7 +958,8 @@ impl LiteCord {
             .bg(c_side())
             .flex()
             .flex_col()
-            .child(
+            .when_some(server_side.as_ref().map(|_| ()), |d, _| d)
+            .when(server_side.is_none(), |d| d.child(
                 div().h(u(48.)).flex_none().px(u(10.)).flex().items_center().border_b_1().border_color(c_border()).child(
                     div()
                         .id("find")
@@ -938,12 +979,15 @@ impl LiteCord {
                             this.add_input.update(cx, |s, cx| s.focus(window, cx));
                         })),
                 ),
-            )
-            .child(div().h(u(8.)))
-            .child(list)
+            ))
+            .map(|d| match server_side {
+                Some((head, chans)) => d.child(head).child(chans),
+                None => d.child(div().h(u(8.))).child(list),
+            })
             // The user bar, floating like Discord's.
             .child(
                 div().p(u(8.)).flex_none().child(
+                    div().rounded(u(8.)).bg(c_panel()).flex().flex_col().children(self.render_voice_panel(cx)).child(
                     div()
                         .h(u(52.))
                         .px(u(6.))
@@ -980,20 +1024,7 @@ impl LiteCord {
                                     cx.notify();
                                 })),
                         )
-                        .child(
-                            Button::new("copyid")
-                                .ghost()
-                                .compact()
-                                .icon(IconName::Copy)
-                                .tooltip("Copy your friend code")
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    if let Some(s) = &this.store {
-                                        cx.write_to_clipboard(ClipboardItem::new_string(s.me.uid.clone()));
-                                        this.toast("Your friend code was copied. Friends can paste it in Add Friend.", 4000);
-                                        cx.notify();
-                                    }
-                                })),
-                        )
+                        .children(self.user_bar_buttons(cx))
                         .child(
                             Button::new("opensettings")
                                 .ghost()
@@ -1002,6 +1033,7 @@ impl LiteCord {
                                 .tooltip("User Settings")
                                 .on_click(cx.listener(|this, _, window, cx| this.open_settings(Page::Account, window, cx))),
                         ),
+                    ),
                 ),
             )
     }
@@ -1074,7 +1106,7 @@ impl LiteCord {
             .child(div().px(u(8.)).text_xs().text_color(c_muted()).child("Press Enter to save."))
     }
 
-    fn header(&self, title: impl IntoElement) -> Div {
+    pub(crate) fn header(&self, title: impl IntoElement) -> Div {
         div().h(u(48.)).flex_none().px(u(16.)).flex().items_center().gap(u(12.)).border_b_1().border_color(c_border()).child(title)
     }
 
@@ -1278,6 +1310,13 @@ impl LiteCord {
     }
 
     fn render_dm(&mut self, key: String, cx: &mut Context<Self>) -> Div {
+        let call_buttons = self.dm_call_buttons(&key, cx);
+        // The call area sits above the chat while this DM's call room is open (like the web app).
+        let call_area = if self.call.dm.as_deref() == Some(key.as_str()) {
+            Some(self.render_call_area(crate::call::DM_VOICE, Some(&key), Some(440.), cx))
+        } else {
+            None
+        };
         let store = self.store.as_ref().unwrap();
         let title = store.dm_title(&key);
         let other = store.dm_other(&key);
@@ -1317,12 +1356,8 @@ impl LiteCord {
                     let sub = store.subline(id);
                     div().text_sm().text_color(c_muted()).child(if sub.is_empty() { status_label(store.status_of(id)).to_string() } else { sub })
                 }))
-                // Calls run in the browser for now: this opens the DM's call room there and rings everyone.
                 .child(div().flex_1())
-                .child({
-                    let url = format!("{SERVER}/?room=dm-{}&call=1&ring=1", store.me.dms.get(&key).map(|d| d.cid.clone()).unwrap_or_default());
-                    Button::new("call").primary().small().label("Start Call (opens browser)").on_click(move |_, _, cx| cx.open_url(&url))
-                }),
+                .children(call_buttons),
         );
         let row_count = rows.len();
         let scroller = MessageScroller::new("msgs", self.scroller.clone(), move |ix, _, _| {
@@ -1464,6 +1499,7 @@ impl LiteCord {
             .flex()
             .flex_col()
             .child(head)
+            .children(call_area)
             .child(if row_count == 0 {
                 div().flex_1().flex().flex_col().justify_end().child(dm_intro(other.as_deref().unwrap_or(&key), &title, other.is_none())).into_any_element()
             } else {
@@ -1543,6 +1579,9 @@ impl Render for LiteCord {
             self.window_title = title;
         }
 
+        for old in self.old_images.drain(..) {
+            let _ = window.drop_image(old);
+        }
         let title = self.title_text();
         let content: AnyElement = if self.store.is_none() {
             self.render_setup(cx)
@@ -1552,6 +1591,7 @@ impl Render for LiteCord {
             let main = match self.view.clone() {
                 View::Friends(t) => self.render_friends(t, cx),
                 View::Dm(k) => self.render_dm(k, cx),
+                View::Server(r) => self.render_server(r, cx),
             };
             div().size_full().flex().child(self.render_rail(cx)).child(self.render_sidebar(cx)).child(main).into_any_element()
         };
@@ -1587,6 +1627,16 @@ impl Render for LiteCord {
                 )
                 .child(self.render_status_menu(cx))
             })
+            .when(self.server.adding && self.settings.is_none(), |d| {
+                d.child(
+                    div().id("addbackdrop").absolute().size_full().on_click(cx.listener(|this, _, _, cx| {
+                        this.server.adding = false;
+                        cx.notify();
+                    }))
+                    .child(self.render_add_server(cx)),
+                )
+            })
+            .when(self.settings.is_none(), |d| d.children(self.render_ring_card(cx)))
             .children(toast.map(|(t, _)| {
                 div().absolute().bottom(u(80.)).left_0().right_0().flex().justify_center().child(
                     div()

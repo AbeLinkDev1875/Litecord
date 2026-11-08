@@ -4,6 +4,10 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod app;
+mod call;
+mod callui;
+mod rooms;
+mod servers;
 mod net;
 mod prefs;
 mod settings;

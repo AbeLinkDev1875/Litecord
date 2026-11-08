@@ -35,6 +35,11 @@ pub struct Prefs {
     pub win_w: f32,
     pub win_h: f32,
     pub maximized: bool,
+    /// Microphone and speakers for calls, by name ("" = the system's default).
+    pub mic_device: String,
+    pub speaker_device: String,
+    /// Servers (rooms) you joined, in rail order.
+    pub servers: Vec<String>,
 }
 
 impl Default for Prefs {
@@ -57,6 +62,9 @@ impl Default for Prefs {
             win_w: 1280.,
             win_h: 800.,
             maximized: false,
+            mic_device: String::new(),
+            speaker_device: String::new(),
+            servers: Vec::new(),
         }
     }
 }

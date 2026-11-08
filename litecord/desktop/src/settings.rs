@@ -18,6 +18,7 @@ pub enum Page {
     Appearance,
     Window,
     Notifications,
+    Voice,
     Keybinds,
     Language,
     Advanced,
@@ -30,6 +31,7 @@ impl Page {
             "appearance" => Page::Appearance,
             "window" => Page::Window,
             "notifications" => Page::Notifications,
+            "voice" => Page::Voice,
             "keybinds" => Page::Keybinds,
             "language" => Page::Language,
             "advanced" => Page::Advanced,
@@ -64,6 +66,7 @@ fn sections() -> Vec<(&'static str, Vec<Item>)> {
             vec![
                 Item { page: Page::Appearance, label: "Appearance", icon: IconName::Palette, words: "theme dark light ash onyx zoom scale size font compact cozy" },
                 Item { page: Page::Window, label: window_label(), icon: IconName::Frame, words: "title bar border frame decorations minimize maximize close buttons native" },
+                Item { page: Page::Voice, label: "Voice & Video", icon: IconName::Mic, words: "microphone mic speakers headphones output input audio device call camera" },
                 Item { page: Page::Notifications, label: "Notifications", icon: IconName::Bell, words: "desktop alerts preview" },
                 Item { page: Page::Keybinds, label: "Keybinds", icon: IconName::SquareTerminal, words: "shortcuts keys keyboard" },
                 Item { page: Page::Language, label: "Language & Time", icon: IconName::Globe, words: "clock 12 24 hour time" },
@@ -268,6 +271,7 @@ impl LiteCord {
             Page::Appearance => self.page_appearance(window, cx),
             Page::Window => self.page_window(window, cx),
             Page::Notifications => self.page_notifications(cx),
+            Page::Voice => self.page_voice(cx),
             Page::Keybinds => self.page_keybinds(),
             Page::Language => self.page_language(cx),
             Page::Advanced => self.page_advanced(),
@@ -683,6 +687,58 @@ impl LiteCord {
                             let _ = notify_rust::Notification::new().appname("LiteCord").summary("LiteCord").body("Notifications are working! 🎉").show();
                         });
                     }),
+                ),
+            )
+    }
+
+    fn page_voice(&mut self, cx: &mut Context<Self>) -> Div {
+        if self.audio_devices.is_none() {
+            self.audio_devices = Some(crate::call::audio::Audio::devices());
+        }
+        let (ins, outs) = self.audio_devices.clone().unwrap_or_default();
+        // ALSA lists many plugin devices; keep the ones people pick.
+        let useful = |n: &String| {
+            !cfg!(target_os = "linux")
+                || ["pipewire", "pulse"].contains(&n.as_str())
+                || n.starts_with("sysdefault:") || n.starts_with("front:") || n.starts_with("hdmi:")
+        };
+        let list = |id: &'static str, names: Vec<String>, cur: String, mic: bool, cx: &mut Context<Self>| {
+            let mut col = div().flex().flex_col().gap(u(2.));
+            let mut all = vec![String::new()];
+            all.extend(names.into_iter().filter(|n| useful(n)));
+            for (i, n) in all.into_iter().enumerate() {
+                let on = n == cur;
+                let label = if n.is_empty() { "Default".to_string() } else { n.clone() };
+                col = col.child(
+                    div().id(SharedString::from(format!("{id}-{i}"))).h(u(36.)).px(u(10.)).rounded(u(6.)).flex().items_center().gap(u(10.)).cursor_pointer()
+                        .bg(if on { c_active() } else { transparent_black() }).hover(|d| d.bg(c_hover()))
+                        .child(div().size(u(16.)).rounded_full().border_2().border_color(if on { c_accent() } else { c_muted() }).flex().items_center().justify_center()
+                            .when(on, |d| d.child(div().size(u(8.)).rounded_full().bg(c_accent()))))
+                        .child(div().truncate().text_color(c_text()).child(label))
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            if mic { this.prefs.mic_device = n.clone(); } else { this.prefs.speaker_device = n.clone(); }
+                            this.save_prefs();
+                            if let Some(e) = &this.call.engine {
+                                e.send(crate::call::Cmd::Devices { mic: this.prefs.mic_device.clone(), speaker: this.prefs.speaker_device.clone() });
+                            }
+                            cx.notify();
+                        })),
+                );
+            }
+            col
+        };
+        let (mic, spk) = (self.prefs.mic_device.clone(), self.prefs.speaker_device.clone());
+        div()
+            .child(h2("Voice & Video"))
+            .child(note("Calls clean up your microphone with the same echo cancellation, noise suppression and automatic volume that browsers use."))
+            .child(section("INPUT DEVICE").child(list("mic", ins, mic, true, cx)))
+            .child(section("OUTPUT DEVICE").child(list("spk", outs, spk, false, cx)))
+            .child(
+                section("").child(
+                    Button::new("rescan").label("Look for Devices Again").on_click(cx.listener(|this, _, _, cx| {
+                        this.audio_devices = None;
+                        cx.notify();
+                    })),
                 ),
             )
     }

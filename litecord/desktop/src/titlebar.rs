@@ -57,6 +57,7 @@ impl LiteCord {
         match &self.view {
             View::Friends(_) => "Friends".into(),
             View::Dm(k) => self.store.as_ref().map(|s| s.dm_title(k)).unwrap_or_default(),
+            View::Server(r) => r.clone(),
         }
     }
 

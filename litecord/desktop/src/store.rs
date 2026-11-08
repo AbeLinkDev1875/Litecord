@@ -136,7 +136,19 @@ pub enum Notice {
     Info(String),
 }
 
+/// Someone calling us (the incoming call card). Rings for 30 seconds, like the web app.
+#[derive(Clone, Debug)]
+pub struct Ring {
+    pub from: String,
+    pub key: String,
+    pub cid: String,
+    pub name: String,
+    pub video: bool,
+    pub until: i64,
+}
+
 pub struct Store {
+    pub ringing: Option<Ring>,
     pub me: Saved,
     pub presence: HashMap<String, Option<Presence>>,
     pub typing: HashMap<String, (String, String, i64)>, // from uid -> (dm key, name, until)
@@ -172,6 +184,7 @@ impl Store {
 
     fn from_saved(me: Saved, path: PathBuf) -> Store {
         Store {
+            ringing: None,
             me,
             presence: HashMap::new(),
             typing: HashMap::new(),
@@ -421,6 +434,63 @@ impl Store {
         json!({"name": d.name, "members": d.members, "owner": d.owner})
     }
 
+    /// Rings the people in a DM who aren't in its call yet (`{t: "ring"}` mail, like the web app).
+    pub fn ring(&mut self, key: &str, to: &[String], video: bool) {
+        let Some(d) = self.me.dms.get(key).cloned() else { return };
+        if to.is_empty() || d.left {
+            return;
+        }
+        let mut body = json!({"t": "ring", "n": self.me.name, "cid": d.cid, "video": video});
+        if d.group {
+            body["k"] = Self::key_part(key);
+            body["g"] = Self::group_out(&d);
+        }
+        self.mail(to, body, true);
+    }
+
+    /// Stops ringing them (we left before they answered).
+    pub fn ring_stop(&mut self, key: &str) {
+        let mut body = json!({"t": "ring-stop"});
+        if key.starts_with("g:") {
+            body["k"] = Self::key_part(key);
+        }
+        let to = self.dm_targets(key);
+        self.mail(&to, body, true);
+    }
+
+    fn incoming_call(&mut self, from: &str, b: &Value, nm: String) {
+        let Some(cid) = b["cid"].as_str().filter(|c| is_gid(c)).map(String::from) else { return };
+        let key = Self::mail_key(from, b);
+        if !self.me.dms.contains_key(&key) {
+            if key.starts_with("g:") {
+                if !self.group_from_mail(&key, b, from) {
+                    return;
+                }
+            } else {
+                let name = if nm.is_empty() { "Someone".to_string() } else { nm.clone() };
+                self.me.dms.insert(key.clone(), Dm { key: key.clone(), members: BTreeMap::from([(from.to_string(), name)]), cid: cid.clone(), last: now_ms(), ..Default::default() });
+            }
+            self.save();
+        }
+        let d = &self.me.dms[&key];
+        if d.left || (d.group && !d.members.contains_key(from)) {
+            return;
+        }
+        let name = if nm.is_empty() { self.name_of(from) } else { nm };
+        self.ringing = Some(Ring { from: from.into(), key, cid, name, video: b["video"].as_bool().unwrap_or(false), until: now_ms() + 30_000 });
+    }
+
+    /// Answering a call: a 1:1 DM uses the caller's call room from now on, like the web app.
+    pub fn take_call_room(&mut self, key: &str, cid: &str) {
+        if let Some(d) = self.me.dms.get_mut(key) {
+            if !d.group {
+                d.cid = cid.to_string();
+            }
+            d.closed = false;
+        }
+        self.save();
+    }
+
     pub fn send_text(&mut self, key: &str, text: &str) {
         let text: String = text.trim().chars().take(2000).collect();
         if text.is_empty() {
@@ -618,8 +688,13 @@ impl Store {
             }
             "gmeta" => self.mail_group(from, b),
             "ring" => {
-                let name = if nm.is_empty() { self.name_of(from) } else { nm };
-                self.notices.push(Notice::Info(format!("{name} is calling you. Calls aren't in the desktop app yet, so answer in the browser.")));
+                self.incoming_call(from, b, nm);
+                None
+            }
+            "ring-stop" => {
+                if self.ringing.as_ref().map(|r| r.from == from).unwrap_or(false) {
+                    self.ringing = None;
+                }
                 None
             }
             _ => None, // files and calls come later
@@ -827,6 +902,28 @@ mod tests {
         // Bob deletes it.
         s.on_text(&mail(BOB, 3, json!({"t": "op", "ev": {"type": "del", "mid": "0123456789ab"}})));
         assert!(s.me.msgs[&k[0]].is_empty());
+    }
+
+    #[test]
+    fn calls_ring_like_the_web() {
+        let mut s = store();
+        s.me.friends.insert(BOB.into(), Friend { name: "Bob".into(), state: FriendState::Friend, since: 0 });
+        let cid = "a".repeat(24);
+        // Bob calls: an incoming call card for his DM, with his call room.
+        s.on_text(&mail(BOB, 1, json!({"t": "ring", "n": "Bob", "cid": cid, "video": true})));
+        let r = s.ringing.clone().expect("ringing");
+        assert_eq!((r.key.as_str(), r.cid.as_str(), r.video), (format!("u:{BOB}").as_str(), cid.as_str(), true));
+        s.on_text(&mail(BOB, 2, json!({"t": "ring-stop"})));
+        assert!(s.ringing.is_none());
+        // We call Bob: ephemeral ring mail with our DM's call room, and ring-stop when we give up.
+        let key = s.dm_for(BOB);
+        s.outbox.clear();
+        s.ring(&key, &[BOB.to_string()], false);
+        let v: Value = serde_json::from_str(&s.outbox[0]).unwrap();
+        assert_eq!((v["eph"].as_bool(), v["body"]["t"].as_str()), (Some(true), Some("ring")));
+        assert_eq!(v["body"]["cid"], json!(s.me.dms[&key].cid));
+        s.ring_stop(&key);
+        assert!(s.outbox[1].contains("ring-stop"));
     }
 
     #[test]
