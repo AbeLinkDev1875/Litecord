@@ -1,0 +1,75 @@
+# Publishes a LiteCord desktop release when a version tag is pushed.
+#
+#   1. Set `version` in litecord/desktop/Cargo.toml (for example 2.1.0) and push that to main.
+#   2. git tag v2.1.0 && git push origin v2.1.0
+#
+# The tag must be exactly "v" + that version, and its commit must be on main. If not, this stops
+# before building, and no release is made. Then it builds Linux and Windows (with the tests) and
+# makes the GitHub Release with both files attached.
+#
+# "Run workflow" on the Actions tab does a dry run: the same checks and builds, with no release.
+name: Release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - id: v
+        name: Tag matches the app version and is on main
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' litecord/desktop/Cargo.toml | head -1)
+          echo "Cargo.toml version: $version"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::The version in litecord/desktop/Cargo.toml must look like 2.1.0"; exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            tag="$GITHUB_REF_NAME"
+            if [ "$tag" != "v$version" ]; then
+              echo "::error::Tag $tag doesn't match the app version v$version. Delete the tag (git push --delete origin $tag), fix one of them, and tag again."; exit 1
+            fi
+            if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+              echo "::error::Tag $tag points at a commit that isn't on main. Push the commit to main first."; exit 1
+            fi
+            if gh release view "$tag" >/dev/null 2>&1; then
+              echo "::error::A release named $tag already exists. Use a new version number."; exit 1
+            fi
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+  build:
+    needs: check
+    uses: ./.github/workflows/desktop.yml
+  publish:
+    needs: [check, build]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: dist }
+      - name: Make the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          cd dist
+          chmod +x litecord-linux/litecord
+          tar -czf "LiteCord-$VERSION-linux-x86_64.tar.gz" -C litecord-linux litecord
+          cp litecord-windows/litecord.exe "LiteCord-$VERSION-windows-x86_64.exe"
+          sha256sum LiteCord-* > SHA256SUMS.txt
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --latest \
+            --title "LiteCord $TAG" --generate-notes \
+            "LiteCord-$VERSION-linux-x86_64.tar.gz" "LiteCord-$VERSION-windows-x86_64.exe" SHA256SUMS.txt
