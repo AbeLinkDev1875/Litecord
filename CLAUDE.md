@@ -43,18 +43,20 @@ while, because it compiles GPUI and downloads a prebuilt libwebrtc.
 
 ## Putting the web app live
 
-The live site is whatever was last deployed, not what's on GitHub. Deploying uploads your
-local folder, so deploy only from an up-to-date `main` with your changes pushed. Otherwise
-you take the other person's work off the site.
+`.github/workflows/cloudflare.yml` deploys the web app to Cloudflare by itself whenever files
+in `litecord/cloudflare/` change on `main`. So pushing to `main` is putting it live: everyone
+using LiteCord gets the change right away. Test in a browser (`npx wrangler dev`) before you
+push. After pushing, check it worked: `gh run list --workflow cloudflare.yml --limit 1`.
 
-```
-git pull
-cd litecord/cloudflare
-npx wrangler login     # once, with the LiteCord Cloudflare account
-npx wrangler deploy
-```
+It needs the repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. If the run
+says they're missing or the token is wrong, ask the person to set them. Never ask them to paste
+a token into the chat. To deploy `main` again without a change: `gh workflow run cloudflare.yml`.
 
-Test the web app in a browser before deploying. Everyone using LiteCord gets the change at once.
+Backup, if GitHub Actions is down: `litecord/cloudflare/deploy.cmd` (Windows, double-click it)
+or `deploy.sh`. They update from GitHub, refuse if there are changes or commits that aren't on
+GitHub yet, then run `wrangler deploy` (it asks to sign in to Cloudflare the first time). Don't
+run `wrangler deploy` straight from a folder that isn't up to date with `main`. It would
+replace the site with that older copy and take the other person's work off it.
 
 ## Releasing the desktop app
 
@@ -89,8 +91,8 @@ To test the release builds without publishing anything, run "Release" from the A
 
 Old tags `Release`, `v1.0`, `v1.1` and `v2.0` are from before this workflow. Leave them alone.
 
-If the web app changed too, deploy it (above) along with the release, since new desktop
-features may need the new server.
+The web app goes live from `main` on its own, before the release is tagged. New desktop
+features that need server changes will find them already there.
 
 ## Style
 
