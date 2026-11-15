@@ -701,6 +701,24 @@ body.spoil-all .spoiler *{visibility:visible}
 .callwrap:has(.vchat) .cbar{grid-template-columns:1fr;justify-items:center}
 .callslot.theater{position:fixed;inset:0;z-index:35;height:auto!important;background:#000;animation:fadeIn .15s}
 .callslot:fullscreen .call{height:100%}
+#vpSignal{cursor:pointer}
+#statsBox{position:fixed;right:16px;top:60px;z-index:44;width:330px;max-width:calc(100vw - 32px);max-height:calc(100vh - 170px);display:flex;flex-direction:column;background:#0b0b0dea;color:#e6e7ea;border:1px solid #fff2;border-radius:10px;font-size:12px;box-shadow:0 8px 28px #000a;animation:fadeIn .15s}
+.sthead{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 6px 6px 12px;border-bottom:1px solid #fff2;font-size:13px;color:#fff}
+#statsBox .ib{color:#e6e7ea}
+.stbody{overflow:auto;padding:4px 12px 12px}
+.stbody p{color:#a3a8b0;margin:10px 0 0}
+.stpeer{padding-top:10px}
+.stpeer+.stpeer{margin-top:10px;border-top:1px solid #fff2}
+.stname{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;color:#fff;margin-bottom:4px}
+.stpill{font-size:11px;padding:1px 8px;border-radius:10px;background:#fff2;color:#d0d3d8}
+.stpill.ok{background:#23a55a33;color:#4ade80}
+.stpill.bad{background:#da373c33;color:#ff7b7e}
+.stsec{margin-top:8px;font-weight:700;color:#fff}
+.strow{display:flex;justify-content:space-between;gap:12px;line-height:1.55;font-variant-numeric:tabular-nums}
+.strow span:first-child{color:#a3a8b0;flex:none}
+.strow span:last-child{text-align:right;overflow-wrap:anywhere}
+.strow .warn{color:var(--yellow)}
+.strow .bad{color:#ff7b7e}
 #soundBlock{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);z-index:45;background:var(--yellow);color:#000;border:0;border-radius:8px;padding:10px 16px;font-weight:700;cursor:pointer;box-shadow:0 6px 20px #0008;animation:modalIn .2s var(--spring)}
 </style>
 </head>
@@ -817,7 +835,6 @@ const RESOLUTIONS = {
   "1440": {w: 2560, h: 1440, label: "1440p"},
   "max": {w: 0, h: 0, label: "Full"},
 };
-const CAM = {w: 640, h: 360, fps: 15, br: 500e3};  // camera kept small: cheap to encode and decode
 const MAX_FILE = 25 * 1024 * 1024;
 const MAX_FILES_TOTAL = 500 * 1024 * 1024;  // files live in browser memory, so this stays modest
 const HISTORY_LIMIT = 200, POST_LIMIT = 100, MAX_CHANNELS = 50;
@@ -839,7 +856,8 @@ const prefs = Object.assign({notify: "mentions", sound: true, compact: false, fs
                              ec: true, agc: true, nsMode: "rnnoise", inVol: 1, outVol: 1, inputMode: "vad", autoSens: true,
                              sens: -50, pttKey: "Backquote", pttDelay: 20, vol: {}, lmute: {}, theme: "dark", gap: 14, zoom: 1,
                              reduce: false, status: "online", sounds: {}, sfxVol: .6, sbVol: .8, muted: {}, hideMuted: {},
-                             noVideo: {}, share: {res: "1080", fps: 30, hint: "motion", audio: true}, inputProfile: localStorage.lcPrefs ? "custom" : "isolation"},
+                             noVideo: {}, share: {res: "1080", fps: 30, hint: "motion", audio: true, br: "auto", codec: "h264", audioDev: ""},
+                             camq: {res: "720", fps: 30, br: "auto"}, inputProfile: localStorage.lcPrefs ? "custom" : "isolation"},
                             (() => { try { return JSON.parse(localStorage.lcPrefs || "{}"); } catch { return {}; } })());
 let myName = "", room = "";
 const people = new Map();   // id -> {id, name, state}
@@ -860,6 +878,7 @@ const me = {speaker: false, hand: false};
 let micStream = null, camStream = null, screenStream = null;
 let muted = false, deaf = false, lastMsg = null, titleUnread = 0;
 let micBusy = false, micFailed = false;
+const isFirefox = /Firefox\//.test(navigator.userAgent);
 const canMedia = !!navigator.mediaDevices?.getUserMedia;
 const canShare = !!navigator.mediaDevices?.getDisplayMedia;
 
@@ -2329,11 +2348,12 @@ function noiseModel(kind) {
 let micProc = null, micTest = null;
 // Builds the processed microphone. Returns {stream, level, threshold, open, inGain, gate, stop()}.
 async function buildMic(raw, {loopback = false} = {}) {
-  let ctx = new AudioContext({sampleRate: 48000, latencyHint: "interactive"});
+  // Firefox only accepts a microphone in an audio engine running at the computer's own sample rate, so it doesn't get a forced one.
+  let ctx = new AudioContext(isFirefox ? {latencyHint: "interactive"} : {sampleRate: 48000, latencyHint: "interactive"});
   try { ctx.createMediaStreamSource(raw).disconnect(); }
   catch { ctx.close().catch(() => {}); ctx = new AudioContext({latencyHint: "interactive"}); }
   if (ctx.state === "suspended") ctx.resume().catch(() => {});
-  const mic = {ctx, level: -100, threshold: -50, open: false};
+  const mic = {ctx, raw, level: -100, threshold: -50, open: false};
   let node = ctx.createMediaStreamSource(raw), denoise = null;
   const nsm = nsEff();
   if (NOISE[nsm]) {
@@ -2412,14 +2432,34 @@ addEventListener("blur", () => { if (pttDown) setPtt(false); });  // let go if t
 const keyName = code => !code ? "None" : code === "Backquote" ? "`" : code.replace(/^Key|^Digit/, "").replace(/(Left|Right)$/, " ($1)");
 
 // Other people's audio goes through the browser's audio engine, so volumes can go up to 200%.
-let outCtx = null;
+let outCtx = null, outBus = null, outEl = null, outDest = null;
 function outputCtx() {
   if (!outCtx) {
     try { outCtx = new AudioContext(); } catch { return null; }
-    if (prefs.spk) outCtx.setSinkId?.(prefs.spk).catch(() => {});
+    outBus = outCtx.createGain();  // everything you hear goes through here, then on to your speaker
+    routeOutput();
   }
   if (outCtx.state === "suspended") outCtx.resume().catch(() => {});
   return outCtx;
+}
+// Chrome can point the audio engine straight at the speaker you picked. Firefox can't, so there the
+// sound is handed to an <audio> element, which can.
+function routeOutput() {
+  if (!outCtx) return;
+  const direct = () => { try { outBus.disconnect(); } catch {} outBus.connect(outCtx.destination); };
+  if (outCtx.setSinkId) { direct(); outCtx.setSinkId(prefs.spk || "").catch(() => {}); return; }
+  if (!prefs.spk || !("setSinkId" in HTMLMediaElement.prototype)) return direct();
+  try {
+    if (!outEl) {
+      outDest = outCtx.createMediaStreamDestination();
+      outEl = h("audio", {autoplay: true});
+      outEl.srcObject = outDest.stream;
+      $("#sounds").append(outEl);
+    }
+    outBus.disconnect();
+    outBus.connect(outDest);
+    outEl.setSinkId(prefs.spk).then(() => outEl.play()).catch(err => { console.warn(err); direct(); });
+  } catch (err) { console.warn(err); direct(); }
 }
 
 /* ---------- message formatting (Discord-style markdown) ---------- */
@@ -2497,8 +2537,11 @@ async function updateMic() {
     if (canSend() && !micStream && !micFailed) {
       try {
         const raw = await navigator.mediaDevices.getUserMedia({audio: micConstraints()});
-        try { micProc = await buildMic(raw); micStream = micProc.stream; }
-        catch (err) { console.warn(err); micProc = null; micStream = raw; }  // fall back to the plain mic
+        try {
+          if (prefs.plainAudio) throw new Error("simple call audio is on");
+          micProc = await buildMic(raw); micStream = micProc.stream;
+          micWatch(micProc);
+        } catch (err) { console.warn(err); micProc = null; micStream = raw; }  // fall back to the plain mic
       } catch (err) {
         micFailed = true;
         toast("Couldn't use your microphone: " + err.message + ". You can still listen.");
@@ -2507,6 +2550,17 @@ async function updateMic() {
   } finally { micBusy = false; }
   if (canSend() !== !!micStream && !micFailed) return updateMic();  // things changed while waiting
   applyMicEnabled(); syncMedia(); renderPanel();
+}
+// If the browser never lets the voice processing start (it would send silence), switch to the plain microphone.
+function micWatch(mic) {
+  setTimeout(() => {
+    if (micProc !== mic || mic.ctx.state === "running") return;
+    console.warn("Voice processing didn't start; using the plain microphone.");
+    micProc = null; micStream = mic.raw;
+    mic.ctx.close().catch(() => {});
+    applyMicEnabled(); syncMedia(); renderPanel();
+    toast("Voice processing couldn't start in this browser, so your plain microphone is being used.");
+  }, 2500);
 }
 function micConstraints() {
   return {deviceId: prefs.mic ? {ideal: prefs.mic} : undefined, echoCancellation: ecEff(),
@@ -2520,8 +2574,8 @@ function restartMic() {  // after picking another mic in settings
 }
 function restartCamera() { if (camStream) { stopCamera(); toggleCamera(); } }
 function applySink() {
-  outCtx?.setSinkId?.(prefs.spk || "").catch(() => {});
-  document.querySelectorAll("#sounds audio").forEach(a => a.setSinkId?.(prefs.spk || "").catch(() => {}));
+  document.querySelectorAll("#sounds audio").forEach(a => { if (a !== outEl) a.setSinkId?.(prefs.spk || "").catch(() => {}); });
+  routeOutput();
 }
 function applyMicEnabled() { micStream?.getAudioTracks().forEach(t => t.enabled = !muted && !deaf); }
 
@@ -2544,9 +2598,7 @@ async function toggleCamera() {
   if (!canSend()) return;
   let s;
   try {
-    s = await navigator.mediaDevices.getUserMedia({video: {
-      deviceId: prefs.cam ? {ideal: prefs.cam} : undefined,
-      width: {ideal: CAM.w}, height: {ideal: CAM.h}, frameRate: {ideal: CAM.fps, max: CAM.fps}}});
+    s = await navigator.mediaDevices.getUserMedia({video: {deviceId: prefs.cam ? {ideal: prefs.cam} : undefined, ...camConstraints(camLimits())}});
   } catch (err) { return toast("Couldn't use your camera: " + err.message); }
   if (!canSend()) return s.getTracks().forEach(t => t.stop());
   camStream = s;
@@ -2565,14 +2617,36 @@ function stopCamera(notify = true) {
   renderPanel(); renderSidebar();
 }
 
+/* ---------- picture quality and bitrate ---------- */
+// A bitrate you picked yourself (in Mbps), or 0 for "Auto".
+function pickedBitrate(v) {
+  const n = parseFloat(v);
+  return n > 0 ? Math.round(Math.min(50, Math.max(0.1, n)) * 1e6) : 0;
+}
+function camLimits() {
+  const c = prefs.camq || {}, r = RESOLUTIONS[c.res]?.w ? RESOLUTIONS[c.res] : RESOLUTIONS["720"];
+  const fps = [15, 30, 60].includes(+c.fps) ? +c.fps : 30;
+  return {w: r.w, h: r.h, fps, br: pickedBitrate(c.br) || Math.round(Math.min(6e6, Math.max(400e3, r.w * r.h * fps * 0.07)))};
+}
+const camConstraints = q => ({width: {ideal: q.w}, height: {ideal: q.h}, frameRate: {ideal: q.fps, max: q.fps}});
+function applyCamLimits() {  // after changing camera quality in settings, while the camera is on
+  if (!camStream) return;
+  const q = camLimits();
+  camStream.getVideoTracks()[0]?.applyConstraints(camConstraints(q)).catch(() => {});
+  for (const p of pcs.values()) setEncoding(p.out.cam, {maxBitrate: q.br, maxFramerate: q.fps}, "balanced");
+}
+
 /* ---------- screen share ---------- */
 function shareLimits() {
   const s = prefs.share || {}, r = RESOLUTIONS[s.res] || RESOLUTIONS["1080"];
   const fps = [15, 30, 60].includes(+s.fps) ? +s.fps : 30;
   const w = r.w || 2560, hgt = r.h || 1440;
-  // Bitrate grows with pixels and frame rate, clamped to something a home connection can carry.
-  const br = Math.round(Math.min(8e6, Math.max(300e3, w * hgt * fps * 0.08)));
-  return {w: r.w, h: r.h, fps, br, hint: s.hint === "detail" ? "detail" : "motion"};
+  const hint = s.hint === "detail" ? "detail" : "motion";
+  // Auto bitrate grows with pixels and frame rate, clamped to something a home connection can carry.
+  const br = pickedBitrate(s.br) || Math.round(Math.min(10e6, Math.max(500e3, w * hgt * fps * 0.1)));
+  // When the connection can't keep up: "Clarity" keeps every pixel and drops frames; "Smoothness" gives up a bit of both
+  // (the browser's default would only shrink the picture, which is what makes streams look blurry).
+  return {w: r.w, h: r.h, fps, br, hint, pref: hint === "detail" ? "maintain-resolution" : "balanced"};
 }
 function shareConstraints(q) {
   const v = {frameRate: {max: q.fps}};
@@ -2589,6 +2663,15 @@ async function startShare() {
   } catch (err) {
     if (err.name !== "NotAllowedError") toast("Couldn't share your screen: " + err.message);
     return;
+  }
+  // Firefox can't capture the sound of a screen or tab. If you picked a sound source for it
+  // (Stereo Mix, a virtual audio cable…), that gets added to the stream instead.
+  if (prefs.share?.audio && !s.getAudioTracks().length && prefs.share.audioDev) {
+    try {
+      const a = await navigator.mediaDevices.getUserMedia({audio: {deviceId: {exact: prefs.share.audioDev},
+        echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: {ideal: 2}}});
+      s.addTrack(a.getAudioTracks()[0]);
+    } catch (err) { toast("Your stream started without sound: couldn't use the sound input you picked (" + err.message + ")."); }
   }
   if (!canSend()) return s.getTracks().forEach(t => t.stop());
   const old = screenStream;
@@ -2616,15 +2699,18 @@ function applyShareLimits() {
   const q = shareLimits(), v = screenStream.getVideoTracks()[0];
   v.contentHint = q.hint;
   v.applyConstraints(shareConstraints(q)).catch(() => {});
-  for (const p of pcs.values()) setEncoding(p.out.screen, {maxBitrate: q.br, maxFramerate: q.fps});
+  for (const p of pcs.values()) setEncoding(p.out.screen, {maxBitrate: q.br, maxFramerate: q.fps}, q.pref);
 }
-function setEncoding(out, enc) {
+function setEncoding(out, enc, pref) {
   for (const s of out?.senders || []) {
     if (s.track?.kind !== "video") continue;
-    const prm = s.getParameters();
-    if (!prm.encodings?.length) continue;
-    prm.encodings.forEach(e => Object.assign(e, enc));
-    s.setParameters(prm).catch(() => {});
+    try {
+      const prm = s.getParameters();
+      if (!prm.encodings?.length) continue;
+      prm.encodings.forEach(e => Object.assign(e, enc));
+      if (pref) prm.degradationPreference = pref;
+      s.setParameters(prm).catch(() => {});
+    } catch (err) { console.warn(err); }
   }
 }
 
@@ -2639,16 +2725,16 @@ function syncMedia() {
     let p = pcs.get(id);
     if (!p && !want.mic && !want.cam && !want.screen) continue;
     p = p || makePeer(id);
-    const q = shareLimits();
+    const q = shareLimits(), cq = camLimits();
     try {
       setStream(p, "mic", want.mic);
-      setStream(p, "cam", want.cam, {maxBitrate: CAM.br, maxFramerate: CAM.fps});
-      setStream(p, "screen", want.screen, {maxBitrate: q.br, maxFramerate: q.fps});
+      setStream(p, "cam", want.cam, {maxBitrate: cq.br, maxFramerate: cq.fps}, "balanced");
+      setStream(p, "screen", want.screen, {maxBitrate: q.br, maxFramerate: q.fps}, q.pref);
     } catch (err) { console.warn(err); }
   }
   applyAudio();
 }
-function setStream(p, key, stream, videoEnc) {
+function setStream(p, key, stream, videoEnc, pref) {
   const cur = p.out[key];
   if ((cur?.stream || null) === stream) return;
   if (cur) { cur.senders.forEach(s => { try { p.pc.removeTrack(s); } catch {} }); delete p.out[key]; }
@@ -2657,20 +2743,52 @@ function setStream(p, key, stream, videoEnc) {
   for (const t of stream.getTracks().sort((a, b) => (a.kind === "video" ? 0 : 1) - (b.kind === "video" ? 0 : 1))) {
     const init = {direction: "sendonly", streams: [stream]};
     if (t.kind === "video" && videoEnc) init.sendEncodings = [videoEnc];
+    else if (t.kind === "audio" && key === "screen") init.sendEncodings = [{maxBitrate: 128e3}];  // stream sound is music and games, not just speech
     const tr = p.pc.addTransceiver(t, init);
-    if (t.kind === "video") preferH264(tr);
+    if (t.kind === "video") preferCodec(tr, key === "screen" ? prefs.share?.codec : "h264");
     senders.push(tr.sender);
   }
   p.out[key] = {stream, senders};
+  if (pref) setEncoding(p.out[key], {}, pref);
 }
 // H.264 can use the laptop's hardware video encoder, which is much lighter on the CPU.
-function preferH264(tr) {
+// For a screen share you can pick VP9 or AV1 instead: sharper for the same bitrate, but more work for the CPU.
+function preferCodec(tr, first) {
   try {
     const caps = RTCRtpReceiver.getCapabilities?.("video");
     if (!caps || !tr.setCodecPreferences) return;
-    const rank = c => /h264/i.test(c.mimeType) ? 0 : /vp8/i.test(c.mimeType) ? 1 : 2;
+    const want = "/" + (["vp9", "av1"].includes(first) ? first : "h264");
+    const rank = c => { const m = c.mimeType.toLowerCase(); return m.endsWith(want) ? 0 : m.endsWith("/h264") ? 1 : m.endsWith("/vp8") ? 2 : 3; };
     tr.setCodecPreferences([...caps.codecs].sort((a, b) => rank(a) - rank(b)));
   } catch (err) { console.warn(err); }
+}
+// Chrome starts every video at about 300 kbps and only climbs slowly, so a stream looks blurry for its first
+// seconds. This hint, added to the other side's reply before the browser reads it, lets it start near its target.
+function tuneRemoteSdp(p, sdp) {
+  try {
+    if (!/Chrome\//.test(navigator.userAgent)) return sdp;
+    const start = new Map();  // mid -> starting kbps
+    for (const [key, o] of Object.entries(p.out)) for (const s of o.senders) {
+      const mid = p.pc.getTransceivers().find(t => t.sender === s)?.mid;
+      if (mid == null || s.track?.kind !== "video") continue;
+      const br = key === "screen" ? shareLimits().br : camLimits().br;
+      start.set(String(mid), Math.round(Math.min(br * .6, 3e6) / 1000));
+    }
+    if (!start.size) return sdp;
+    return sdp.split(/\r\n(?=m=)/).map(sec => {
+      const lines = sec.split("\r\n"), kbps = start.get((lines.find(l => l.startsWith("a=mid:")) || "").slice(6).trim());
+      if (!kbps || !sec.startsWith("m=video")) return sec;
+      const add = "x-google-start-bitrate=" + kbps, out = [];
+      const pts = lines.map(l => /^a=rtpmap:(\d+) (?:VP8|VP9|H264|AV1)\//i.exec(l)?.[1]).filter(Boolean);
+      const hasFmtp = new Set(lines.map(l => /^a=fmtp:(\d+) /.exec(l)?.[1]).filter(Boolean));
+      for (const l of lines) {
+        const f = /^a=fmtp:(\d+) /.exec(l), r = /^a=rtpmap:(\d+) /.exec(l);
+        if (f && pts.includes(f[1]) && !l.includes("x-google-start-bitrate")) out.push(l + ";" + add);
+        else { out.push(l); if (r && pts.includes(r[1]) && !hasFmtp.has(r[1])) out.push(`a=fmtp:${r[1]} ${add}`); }
+      }
+      return out.join("\r\n");
+    }).join("\r\n");
+  } catch (err) { console.warn(err); return sdp; }
 }
 
 function makePeer(id) {
@@ -2725,6 +2843,7 @@ async function handleSignal(p, {description, candidate}) {
     p.ignoreOffer = !p.polite && clash;
     if (p.ignoreOffer) return;
     p.answerPending = description.type === "answer";
+    if (description.sdp) description = {type: description.type, sdp: tuneRemoteSdp(p, description.sdp)};
     try { await pc.setRemoteDescription(description); } finally { p.answerPending = false; }
     if (description.type === "offer") {
       await pc.setLocalDescription();
@@ -2756,9 +2875,10 @@ function onRemoteTrack(peerId, {track, streams}) {
     const ctx = outputCtx();
     try {
       if (!ctx) throw new Error("no audio engine");
+      if (prefs.plainAudio) throw new Error("simple call audio is on");
       r.src = ctx.createMediaStreamSource(r.el.srcObject);
       r.gain = ctx.createGain();
-      r.src.connect(r.gain).connect(ctx.destination);
+      r.src.connect(r.gain).connect(outBus);
     } catch (err) {
       console.warn("Playing call audio without the volume booster:", err);
       r.src?.disconnect(); r.src = r.gain = null;
@@ -2823,6 +2943,132 @@ async function showSafety() {
   }
   $("#codes").replaceChildren(...(rows.length ? rows : [h("li", {class: "dim"}, "Nobody is connected to you in this channel yet.")]));
   $("#e2ee").showModal();
+}
+
+/* ---------- connection & stream stats ---------- */
+// A small panel with the numbers the browser already measures: how you're connected to each person,
+// what you're sending, what you're receiving, and how much each stream is buffering. It only works while it's open.
+let statsTimer = 0;
+const statsPrev = new Map();  // last reading of each counter, to turn totals into "per second"
+function toggleStats(on = !statsTimer) {
+  clearInterval(statsTimer); statsTimer = 0; statsPrev.clear();
+  $("#statsBox")?.remove();
+  if (!on) return;
+  statsHome(h("div", {id: "statsBox"},
+    h("div", {class: "sthead"}, h("b", {}, "Connection & Stream Stats"),
+      h("button", {class: "ib", "data-tip": "Close", onclick: () => toggleStats(false)}, icon("x"))),
+    h("div", {class: "stbody"}, h("p", {}, "Measuring…"))));
+  statsTimer = setInterval(drawStats, 1000);
+  drawStats();
+}
+// Full screen only shows what's inside the call, so the panel moves in there (and back out again).
+function statsHome(box = $("#statsBox")) {
+  const home = document.fullscreenElement || document.body;
+  if (box && box.parentNode !== home) home.append(box);
+}
+document.addEventListener("fullscreenchange", () => statsHome());
+const fmtBps = n => n == null ? "…" : n >= 1e6 ? (n / 1e6).toFixed(2) + " Mbps" : Math.round(n / 1e3) + " kbps";
+const fmtMs = s => s == null || isNaN(s) ? "…" : Math.round(s * 1000) + " ms";
+async function drawStats() {
+  const body = $("#statsBox .stbody");
+  if (!body) return;
+  const cards = [];
+  if (voiceCh) for (const [id, p] of pcs) {
+    try { cards.push(statsCard(id, p, await p.pc.getStats())); } catch (err) { console.warn(err); }
+  }
+  if (!body.isConnected) return;
+  const top = body.scrollTop;
+  body.replaceChildren(...(cards.length ? cards : [h("p", {}, voiceCh ? "Nobody is connected to you yet. Stats show up once someone else is in the call." : "Join a voice channel to see stats.")]));
+  body.scrollTop = top;
+}
+function statsCard(id, p, rep) {
+  const all = [...rep.values()], of = t => all.filter(s => s.type === t);
+  // Change in a counter since the last look: {dv, dt (seconds)}.
+  const delta = (s, f) => {
+    if (typeof s?.[f] !== "number") return null;
+    const k = id + "|" + s.id + "|" + f, prev = statsPrev.get(k);
+    statsPrev.set(k, {v: s[f], t: s.timestamp});
+    return prev && s.timestamp > prev.t ? {dv: Math.max(0, s[f] - prev.v), dt: (s.timestamp - prev.t) / 1000} : null;
+  };
+  const rate = (s, f) => { const d = delta(s, f); return d ? d.dv / d.dt : null; };
+  const share = (a, b) => a && b && a.dv + b.dv > 0 ? a.dv / (a.dv + b.dv) : a ? 0 : null;  // a out of (a + b)
+  const pctOf = x => x == null ? "…" : (x * 100).toFixed(x > 0 && x < .1 ? 1 : 0) + "%";
+  const row = (k, v, cls = "") => h("div", {class: "strow"}, h("span", {}, k), h("span", {class: cls}, v));
+  const codec = s => (rep.get(s.codecId)?.mimeType || "").split("/")[1] || "…";
+  const size = s => s.frameWidth ? `${s.frameWidth}×${s.frameHeight} @ ${Math.round(s.framesPerSecond || 0)} fps` : "starting…";
+  const out = [];
+
+  // --- the network connection to this person ---
+  const tp = of("transport").find(t => t.selectedCandidatePairId);
+  const pair = rep.get(tp?.selectedCandidatePairId) || of("candidate-pair").find(c => c.selected) || of("candidate-pair").find(c => c.nominated && c.state === "succeeded");
+  const state = p.pc.connectionState;
+  out.push(h("div", {class: "stname"}, h("b", {}, people.get(id)?.name || "Someone"),
+    h("span", {class: "stpill " + (state === "connected" ? "ok" : state === "failed" ? "bad" : "")}, state)));
+  if (pair) {
+    const lc = rep.get(pair.localCandidateId), rc = rep.get(pair.remoteCandidateId);
+    const relay = lc?.candidateType === "relay" || rc?.candidateType === "relay";
+    const local = lc?.candidateType === "host" && rc?.candidateType === "host";
+    out.push(row("Route", (relay ? "Relayed (TURN)" : local ? "Direct, same network" : "Direct") + (lc?.protocol ? " · " + (lc.relayProtocol || lc.protocol).toUpperCase() : "")));
+    const rtt = pair.currentRoundTripTime ?? all.find(s => s.type === "remote-inbound-rtp" && s.roundTripTime != null)?.roundTripTime;
+    out.push(row("Ping", fmtMs(rtt), rtt > .3 ? "bad" : rtt > .15 ? "warn" : ""));
+    const up = rate(pair, "bytesSent"), down = rate(pair, "bytesReceived");
+    out.push(row("Sending / receiving", `${fmtBps(up == null ? null : up * 8)} / ${fmtBps(down == null ? null : down * 8)}`));
+    if (pair.availableOutgoingBitrate && Object.keys(p.out).length) out.push(row("Upload room (estimate)", fmtBps(pair.availableOutgoingBitrate)));
+  } else out.push(row("Route", "finding a way to connect…"));
+
+  // --- what you send to them ---
+  const mine = new Map();  // transceiver mid -> label
+  for (const [key, o] of Object.entries(p.out)) for (const s of o.senders) {
+    const mid = p.pc.getTransceivers().find(t => t.sender === s)?.mid;
+    if (mid != null) mine.set(String(mid), key === "mic" ? "Your mic" : key === "cam" ? "Your camera" : s.track?.kind === "video" ? "Your stream" : "Your stream sound");
+  }
+  const sending = Object.keys(p.out).length > 0;
+  for (const o of of("outbound-rtp")) {
+    const label = o.mid != null ? mine.get(String(o.mid)) : sending ? (o.kind === "video" ? "Your video" : "Your audio") : null;
+    if (!label) continue;  // a stream you've stopped
+    const br = rate(o, "bytesSent"), back = all.find(s => s.type === "remote-inbound-rtp" && s.localId === o.id);
+    out.push(h("div", {class: "stsec"}, "▲ " + label));
+    if (o.kind === "video") {
+      out.push(row("Picture", size(o)));
+      out.push(row("Bitrate", fmtBps(br == null ? null : br * 8) + (o.targetBitrate ? ` (aiming for ${fmtBps(o.targetBitrate)})` : "")));
+      out.push(row("Codec", codec(o) + (o.encoderImplementation ? " · " + o.encoderImplementation : "")));
+      const why = o.qualityLimitationReason;
+      if (why && why !== "none") out.push(row("Held back by", why === "cpu" ? "your CPU" : why === "bandwidth" ? "your connection" : why, "warn"));
+    } else {
+      out.push(row("Bitrate", fmtBps(br == null ? null : br * 8)));
+      out.push(row("Codec", codec(o)));
+    }
+    if (back?.fractionLost != null) out.push(row("Lost on the way", pctOf(back.fractionLost), back.fractionLost > .05 ? "bad" : back.fractionLost > .01 ? "warn" : ""));
+  }
+
+  // --- what you receive from them, and how much of it is waiting in the buffer ---
+  for (const i of of("inbound-rtp")) {
+    const r = remote.get(i.trackIdentifier);
+    if (i.trackIdentifier ? !r : !i.packetsReceived) continue;
+    const kind = r?.kind || (i.kind === "video" ? "video" : "voice");
+    const label = kind === "voice" ? "Their voice" : kind === "screen-audio" ? "Their stream sound"
+      : r?.streamId && r.streamId === stateOf(id).screen ? "Their stream" : r ? "Their camera" : "Their video";
+    const br = rate(i, "bytesReceived");
+    const lost = share(delta(i, "packetsLost"), delta(i, "packetsReceived"));
+    const bd = delta(i, "jitterBufferDelay"), bn = delta(i, "jitterBufferEmittedCount");
+    const buf = bd && bn?.dv ? bd.dv / bn.dv : i.jitterBufferEmittedCount ? i.jitterBufferDelay / i.jitterBufferEmittedCount : null;
+    out.push(h("div", {class: "stsec"}, "▼ " + label));
+    if (i.kind === "video") out.push(row("Picture", size(i)));
+    out.push(row("Bitrate", fmtBps(br == null ? null : br * 8)));
+    out.push(row("Codec", codec(i) + (i.decoderImplementation ? " · " + i.decoderImplementation : "")));
+    out.push(row("Buffer", fmtMs(buf), buf > .4 ? "warn" : ""));
+    out.push(row("Jitter", fmtMs(i.jitter)));
+    out.push(row("Packets lost", `${pctOf(lost)} now · ${Math.max(0, i.packetsLost || 0)} total`, lost > .05 ? "bad" : lost > .01 ? "warn" : ""));
+    if (i.kind === "video") {
+      out.push(row("Frames dropped", String(i.framesDropped ?? 0)));
+      if (i.freezeCount != null) out.push(row("Freezes", `${i.freezeCount} (${(i.totalFreezesDuration || 0).toFixed(1)} s)`, i.freezeCount ? "warn" : ""));
+    } else {
+      const gap = share(delta(i, "concealedSamples"), delta(i, "totalSamplesReceived"));
+      // concealedSamples is counted inside totalSamplesReceived, so undo the double count
+      if (gap != null) out.push(row("Sound filled in", pctOf(gap ? gap / (1 - gap) : 0), gap > .1 ? "warn" : ""));
+    }
+  }
+  return h("div", {class: "stpeer"}, ...out);
 }
 
 /* ---------- speaking indicator (cheap: reads levels WebRTC already measures) ---------- */
@@ -2966,7 +3212,7 @@ function sfx(name) {
   if (!ctx) return;
   const out = ctx.createGain();
   out.gain.value = prefs.sfxVol ?? .6;
-  out.connect(ctx.destination);
+  out.connect(outBus);
   try { SFX[name](ctx, out, ctx.currentTime + .01); } catch (err) { console.warn(err); }
   setTimeout(() => out.disconnect(), 3000);
 }
@@ -2992,7 +3238,7 @@ function playBoard(i) {
   if (!b || !ctx) return;
   const out = ctx.createGain();
   out.gain.value = prefs.sbVol ?? .8;
-  out.connect(ctx.destination);
+  out.connect(outBus);
   b[2](ctx, out, ctx.currentTime + .02);
   setTimeout(() => out.disconnect(), 4000);
 }
@@ -3348,7 +3594,7 @@ function renderCall() {
       ...audience.map(p => h("span", {title: p.name + (p.state.hand ? " ✋ wants to speak" : ""), style: "cursor:pointer",
         onclick: e => showProfile(p, e), oncontextmenu: e => { e.preventDefault(); userMenu(p, e.clientX, e.clientY); }}, avatar(p)))));
   parts.push(callBar(c, here, dm));
-  const floats = [...slot.querySelectorAll(".sbfloat")];
+  const floats = [...slot.querySelectorAll(".sbfloat, #statsBox")];
   slot.replaceChildren(h("div", {class: "call" + (dm ? " dm" : "")}, ...parts, ...floats));
   slot.querySelectorAll("video").forEach(v => v.play?.().catch(() => {}));
 }
@@ -3433,8 +3679,12 @@ async function deviceItems(kind, key, after) {
   let list = [];
   try { list = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === kind && d.deviceId && d.deviceId !== "default"); } catch {}
   const pick = id => () => { prefs[key] = id; savePrefs(); after(); };
-  return [{label: "Default", radio: !prefs[key], fn: pick("")},
-          ...list.map((d, i) => ({label: d.label || `Device ${i + 1}`, radio: prefs[key] === d.deviceId, fn: pick(d.deviceId)}))];
+  const items = [{label: "Default", radio: !prefs[key], fn: pick("")},
+                 ...list.map((d, i) => ({label: d.label || `Device ${i + 1}`, radio: prefs[key] === d.deviceId, fn: pick(d.deviceId)}))];
+  // Firefox hides speakers until you pick one from its own list.
+  if (kind === "audiooutput" && navigator.mediaDevices.selectAudioOutput)
+    items.push({label: "Choose Another Speaker…", fn: () => navigator.mediaDevices.selectAudioOutput().then(d => pick(d.deviceId)(), () => {})});
+  return items;
 }
 async function audioMenu(anchor) {
   const r = anchor.getBoundingClientRect();
@@ -3464,6 +3714,7 @@ function moreMenu(anchor) {
     voiceCh && {label: "Open Call", fn: () => openCall()},
     {label: "Full Screen", fn: callFullscreen},
     {label: "Voice Encryption (safety codes)", fn: showSafety},
+    {label: "Connection & Stream Stats", check: !!statsTimer, fn: () => toggleStats()},
     "-",
     {label: "Voice Settings", fn: () => openSettings("voice")},
     {label: "Disconnect", danger: true, fn: leaveVoice},
@@ -3497,13 +3748,56 @@ function openShareDialog() {
   const seg = (name, list) => h("div", {class: "seg"}, ...list.map(([v, label]) => h("button", {type: "button", class: "segb" + (String(s[name]) === String(v) ? " sel" : ""),
     onclick: e => { s[name] = v; [...e.currentTarget.parentNode.children].forEach(x => x.classList.toggle("sel", x === e.currentTarget)); }}, label)));
   const audio = h("input", {type: "checkbox", checked: !!s.audio, onchange: e => { s.audio = e.target.checked; }});
+  // Bitrate: Auto, a preset, or any number you type (in Mbps).
+  const presets = ["auto", 2, 4, 6, 8, 12, 20];
+  if (!pickedBitrate(s.br)) s.br = "auto";
+  if (!["vp9", "av1"].includes(s.codec)) s.codec = "h264";
+  const brSeg = seg("br", presets.map(v => [v, v === "auto" ? "Auto" : v + " Mbps"]));
+  const brOwn = h("input", {type: "number", min: 0.1, max: 50, step: 0.1, placeholder: "Or type your own (Mbps)", value: presets.some(v => String(v) === String(s.br)) ? "" : s.br});
+  brOwn.oninput = () => {
+    if (!pickedBitrate(brOwn.value)) return;
+    s.br = +brOwn.value;
+    [...brSeg.children].forEach(x => x.classList.remove("sel"));
+  };
+  brSeg.addEventListener("click", () => { brOwn.value = ""; });
+  // Firefox can't capture a screen's or tab's sound, so there you pick a sound input to send along instead.
+  let sound = h("label", {class: "chk"}, audio, "Share sound too (works for tabs, and whole screens on Windows)");
+  if (isFirefox) {
+    // Inputs that carry what the computer is playing: Stereo Mix (Windows), virtual cables, "Monitor of…" (Linux), BlackHole (Mac).
+    const loop = /stereo ?mix|what u hear|wave ?out|cable output|voicemeeter|monitor of|loopback|blackhole|soundflower/i;
+    const sel = h("select", {onchange: () => { s.audioDev = sel.value; s.audio = !!sel.value; }});
+    const note = h("p", {class: "tiny"});
+    sel.add(new Option("No sound", ""));
+    navigator.mediaDevices.enumerateDevices().then(list => {
+      const ins = list.filter(x => x.kind === "audioinput" && x.deviceId && x.deviceId !== "default");
+      ins.forEach((x, i) => sel.add(new Option((loop.test(x.label) ? "★ " : "") + (x.label || `Sound input ${i + 1}`), x.deviceId)));
+      const found = ins.find(x => loop.test(x.label));
+      // Keep what you chose last time; otherwise pick the computer-sound input for you if there is one.
+      if (s.audioDev && ins.some(x => x.deviceId === s.audioDev)) sel.value = s.audio ? s.audioDev : "";
+      else if (found && s.audio !== false) sel.value = found.deviceId;
+      else sel.value = "";
+      s.audioDev = sel.value || s.audioDev; s.audio = !!sel.value;
+      note.textContent = found ? `"${found.label}" carries your computer's sound, so it's marked with a ★.`
+        : "No computer-sound input was found. On Windows: Sound settings → More sound settings → Recording → right-click → Show Disabled Devices → enable \"Stereo Mix\". "
+          + "No Stereo Mix? Install a free virtual audio cable (VB-CABLE). On Linux pick a \"Monitor of…\" input; on Mac install BlackHole. Then reopen this box.";
+    }).catch(() => {});
+    sound = h("div", {class: "field"}, h("label", {}, "Stream Sound"), sel,
+      h("p", {class: "tiny"}, "Firefox can't capture a screen's or tab's sound by itself, so LiteCord sends a sound input along with your stream instead."),
+      note,
+      h("p", {class: "tiny"}, "Stereo Mix sends everything your computer plays, call included, so friends may hear their own voices echo back. A virtual cable that carries only your game or app avoids that. Chrome, Edge and Brave can share sound without any of this."));
+  }
   d.replaceChildren(
     h("h2", {}, live ? "Stream Quality" : "Share Your Screen"),
     h("p", {}, live ? "Change how your stream looks. Friends see the change right away." : "Pick a quality, click Go Live, then choose a screen, window or tab."),
     h("div", {class: "field"}, h("label", {}, "Resolution"), seg("res", [["720", "720p"], ["1080", "1080p"], ["1440", "1440p"], ["max", "Source"]])),
     h("div", {class: "field"}, h("label", {}, "Frame Rate"), seg("fps", [[15, "15 FPS"], [30, "30 FPS"], [60, "60 FPS"]])),
     h("div", {class: "field"}, h("label", {}, "Optimize For"), seg("hint", [["motion", "Smoothness (games, video)"], ["detail", "Clarity (text, code)"]])),
-    live ? null : h("label", {class: "chk"}, audio, "Share sound too (works for tabs, and whole screens on Windows)"),
+    h("div", {class: "field"}, h("label", {}, "Bitrate"), brSeg, brOwn,
+      h("p", {class: "tiny"}, "More bitrate means a cleaner picture, but your upload has to keep up. Auto picks one from the resolution and frame rate.")),
+    live ? null : h("div", {class: "field"}, h("label", {}, "Video Codec"),
+      seg("codec", [["h264", "H.264 (lightest)"], ["vp9", "VP9 (sharper)"], ["av1", "AV1 (sharpest)"]]),
+      h("p", {class: "tiny"}, "VP9 and AV1 look better at the same bitrate but work the CPU harder. If a friend's browser can't play your pick, H.264 is used for them.")),
+    live ? null : sound,
     h("p", {class: "tiny"}, "Higher settings look better but need a faster computer and internet, for you and for your friends."),
     h("div", {class: "dlgbtns"}, h("button", {class: "btn", onclick: () => d.close()}, "Cancel"),
       h("button", {class: "btn primary", onclick: () => {
@@ -3522,7 +3816,7 @@ function renderPanel() {
   const c = chById(voiceCh), stage = isStage(), ok = canSend();
   const bad = [...pcs.values()].some(p => p.pc.connectionState === "failed");
   $("#vpSignal").classList.toggle("bad", bad);
-  $("#vpSignal").title = bad ? "Couldn't connect directly to someone in the call" : "Voice connected";
+  $("#vpSignal").title = (bad ? "Couldn't connect directly to someone in the call" : "Voice connected") + ". Click for connection and stream stats.";
   $("#vpState").textContent = bad ? "Connection Problem" : stage ? (me.speaker ? "On Stage" : "In the Audience") : "Voice Connected";
   $("#vpName").textContent = isDMRoom() ? dmTitle(curDM()) : `${c?.name || ""} / ${room}`;
   const ai = !!NOISE[nsEff()], nsb = $("#nsBtn");
@@ -3932,6 +4226,12 @@ function voicePage() {
   const pct = (key, label, after) => h("div", {class: "field"}, h("label", {}, label),
     slider(0, 200, 1, Math.round((prefs[key] ?? 1) * 100), v => v + "%", v => { prefs[key] = v / 100; savePrefs(); after(); }));
   const remakeMic = () => { restartMic(); if (micTest) { stopMicTest(); startTest(); } };
+  const camq = prefs.camq = {res: "720", fps: 30, br: "auto", ...prefs.camq};
+  const camSeg = (name, list) => h("div", {class: "seg"}, ...list.map(([v, label]) => h("button", {type: "button", class: "segb" + (String(camq[name]) === String(v) ? " sel" : ""),
+    onclick: e => {
+      camq[name] = v; savePrefs(); applyCamLimits();
+      [...e.currentTarget.parentNode.children].forEach(x => x.classList.toggle("sel", x === e.currentTarget));
+    }}, label)));
 
   // Mic test: a row of ticks that light up with your voice, like Discord's.
   const ticks = h("div", {class: "ticks"}, ...Array.from({length: 56}, () => h("i")));
@@ -4018,6 +4318,13 @@ function voicePage() {
       pct("outVol", "Speaker Volume", applyAudio)),
     h("div", {class: "mtrow"}, testBtn, ticks),
     h("p", {class: "tiny"}, "Say something during a Mic Test and you'll hear yourself the way your friends do."),
+    toggleRow("Simple call audio", "Turn this on if you can't hear friends, or they can't hear you (most useful in Firefox). Your plain microphone is sent and friends are played the standard way. You lose AI noise suppression, voice activity, push-to-talk and volumes above 100%. Your calls reconnect when you change it.",
+      !!prefs.plainAudio, v => {
+        setp("plainAudio", v);
+        if (micStream) { stopMic(); micFailed = false; updateMic(); }
+        for (const id of [...pcs.keys()]) rebuildPeer(id);
+        renderPanel();
+      }),
     h("hr"),
     sect("Input Profile",
       radio("iprof", "isolation", prefs.inputProfile, "Voice Isolation", profile, "Just your voice: AI noise suppression cuts through the noise."),
@@ -4031,6 +4338,11 @@ function voicePage() {
     h("hr"),
     h("h3", {class: "big"}, "Video"),
     h("div", {class: "cols"}, h("div", {}, camBox, camBtn), devSelect("videoinput", "cam", "Camera", () => { restartCamera(); if (camTest) { stopCamTest(); camBtn.click(); } }, "camera")),
+    sect("Camera Quality",
+      h("div", {class: "field"}, h("label", {}, "Resolution"), camSeg("res", [["360", "360p (lightest)"], ["720", "720p"], ["1080", "1080p"]])),
+      h("div", {class: "field"}, h("label", {}, "Frame Rate"), camSeg("fps", [[15, "15 FPS"], [30, "30 FPS"], [60, "60 FPS"]])),
+      h("div", {class: "field"}, h("label", {}, "Bitrate"), camSeg("br", [["auto", "Auto"], [0.5, "0.5 Mbps"], [1, "1 Mbps"], [2, "2 Mbps"], [4, "4 Mbps"], [8, "8 Mbps"]])),
+      h("p", {class: "tiny"}, "Changes apply right away, even while your camera is on. On a slow computer or connection, pick 360p at 15 FPS.")),
     h("hr"),
     sect("Screen Share", h("p", {class: "tiny"}, `Default quality: ${prefs.share.res === "max" ? "Source" : prefs.share.res + "p"}, ${prefs.share.fps} FPS. You can change it each time you click Share Your Screen.`)),
     h("p", {class: "tiny"}, "Device names show up after you've allowed the microphone or camera once.")];
@@ -5192,6 +5504,7 @@ $("#shareBtn").onclick = e => shareClick(e.currentTarget);
 $("#sbBtn").onclick = e => soundboard(e.currentTarget);
 $("#vpMore").onclick = e => moreMenu(e.currentTarget);
 $("#vpName").onclick = () => openCall();
+$("#vpSignal").onclick = () => toggleStats();
 $("#nsBtn").onclick = toggleNoise;
 $("#handBtn").onclick = toggleHand;
 $("#audBtn").onclick = () => send({type: "stage", action: "audience", target: myId});

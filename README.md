@@ -63,13 +63,29 @@ an image. Pictures, videos and audio play right in the chat. Other files are dow
 
 **Voice channels.** Click one to join. The panel at the bottom-left has:
 - **Mute / Deafen** (shortcuts: `Ctrl+Shift+M`, `Ctrl+Shift+D`)
-- **Video**: your camera, kept small (360p, 15 fps) to save CPU
+- **Video**: your camera, 720p at 30 fps by default. Change the resolution, frame
+  rate and bitrate under **Settings → Voice & Video → Camera Quality** (pick
+  360p at 15 fps on a slow computer)
 - **Share**: your screen, a window or a tab. Tick "share audio" in the browser's
   picker if you want sound too. Click any video to make it fullscreen.
 - **Screen share limits**: pick a **resolution** (360p up to 1440p, or Full),
   type any **fps** from 1 to 60, and choose **Smooth** (games, video) or
   **Sharp text** (code, documents). You can change these while sharing.
   Lower = less CPU and internet for you and your friends.
+- **Stream bitrate and codec**: in the same box, pick a **bitrate** (Auto, a
+  preset, or type your own in Mbps) and a **video codec** (H.264 is lightest;
+  VP9 and AV1 look sharper but use more CPU). Bitrate can be changed while live.
+- **Stream sound in Firefox**: Firefox can't capture a screen's sound, so the
+  share box sends a sound input along with your stream instead. It picks
+  "Stereo Mix", a virtual audio cable or a Linux "Monitor of…" input for you
+  if you have one, and tells you how to turn one on if you don't.
+- **Simple call audio**: if you can't hear friends or they can't hear you
+  (mostly in Firefox), turn this on under **Settings → Voice & Video**. It
+  uses the plain microphone and standard playback, without the extras.
+- **Connection & Stream Stats**: click the signal icon in the voice panel, or
+  **More → Connection & Stream Stats**. For each person it shows the route
+  (direct or relayed), ping, bitrates, resolution, codec, packet loss, and how
+  much each stream is buffering.
 - **📴** leaves the call.
 
 **Stage channels.** The first person to join is a speaker. Everyone after that joins
