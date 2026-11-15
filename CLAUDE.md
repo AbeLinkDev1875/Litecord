@@ -1,7 +1,17 @@
 # LiteCord: notes for Claude
 
 LiteCord is a small Discord-style app for a group of friends. Two people work on it, each with
-their own Claude, so keep `main` working and never rewrite its history.
+their own Claude. GitHub is how new versions get posted, released and rolled back, so:
+
+- **Always push the newest version.** When a change works, commit it and push it to `main`
+  without waiting to be asked. Pushing is how it gets live.
+- **Never delete history.** No force pushes, no rewriting or squashing pushed commits, no
+  deleting tags, releases or branches, and no deleting other people's files to tidy up. History
+  is how we learn what changed and how we undo it.
+- **Undo with a new commit**: `git revert <commit>` and push. The site redeploys the reverted
+  version by itself. To bring back an older version of a file:
+  `git checkout <tag or commit> -- <file>`, then commit and push.
+- **Tag every release** (see "Releasing" below). Tags are the named versions we go back to.
 
 ## What's where
 
@@ -25,6 +35,9 @@ or removing them.
 ## Working on it
 
 Use git, not GitHub's "upload files" page, and don't commit zip files of the project.
+If someone does upload a zip or files that way, merge what's new in it into the real files
+(`git merge-file` against the version it started from keeps both people's changes), push, and
+leave the uploaded files where they are.
 
 ```
 git pull            # always first: the other person may have pushed
@@ -61,7 +74,8 @@ replace the site with that older copy and take the other person's work off it.
 ## Releasing the desktop app
 
 Releases are made by `.github/workflows/release.yml`. Never make a release by hand on GitHub's
-website, and never move, reuse or delete a published tag.
+website, and never move, reuse or delete a tag. Make a release whenever there's a set of
+changes worth giving people (new features, or a fix they need), so every version has a tag.
 
 1. Pick the next version, `X.Y.Z`: bump Z for fixes, Y for new features. The current version is
    `version` in `litecord/desktop/Cargo.toml`. Check `gh release list` and `git tag` so you
@@ -82,9 +96,9 @@ website, and never move, reuse or delete a published tag.
 The workflow refuses to publish if the tag isn't exactly `v` + the Cargo.toml version, if the
 tagged commit isn't on `main`, or if a release with that name already exists.
 
-If a release run fails, nothing was published, so you can redo the tag:
-`git push --delete origin vX.Y.Z` and `git tag -d vX.Y.Z`, fix it, push to main, and tag again.
-Once a release is published, don't redo it. Make a new version instead.
+If a release run fails, leave its tag alone. Fix the problem, bump to the next version (for
+example 2.1.0 → 2.1.1), push to main and tag that. Never delete or move a tag, and never redo a
+published release.
 
 To test the release builds without publishing anything, run "Release" from the Actions tab
 (or `gh workflow run release.yml`). It does the same checks and builds but makes no release.
