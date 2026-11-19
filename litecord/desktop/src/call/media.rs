@@ -123,6 +123,8 @@ struct Engine {
     cam: Option<(Local, video::Capture)>,
     screen: Option<(Local, video::Capture)>,
     local_mute: HashSet<String>,
+    user_vol: HashMap<String, f32>,
+    user_mute: HashSet<String>,
     speaking: HashSet<String>,
     stats: Vec<PeerStats>,
     mic_name: String,
@@ -164,6 +166,8 @@ pub fn spawn(base: String, events: async_channel::Sender<CallEvent>, view: Arc<M
                     cam: None,
                     screen: None,
                     local_mute: HashSet::new(),
+                    user_vol: HashMap::new(),
+                    user_mute: HashSet::new(),
                     speaking: HashSet::new(),
                     stats: Vec::new(),
                     mic_name: String::new(),
@@ -334,6 +338,11 @@ impl Engine {
             Cmd::Screen(None) => self.stop_screen(),
             Cmd::LocalMute(id, m) => {
                 if m { self.local_mute.insert(id); } else { self.local_mute.remove(&id); }
+                self.apply_audio();
+            }
+            Cmd::UserAudio { vol, mute } => {
+                self.user_vol = vol;
+                self.user_mute = mute;
                 self.apply_audio();
             }
             Cmd::Chat { ch, text } => {
@@ -931,9 +940,11 @@ impl Engine {
             }
             let st = r.state_of(&rm.peer);
             let hear = !r.me.deaf && r.me.voice.is_some() && st.voice == r.me.voice && !(rm.kind == "voice" && stage && !st.speaker);
-            let on = hear && !self.local_mute.contains(&rm.peer);
+            let who = r.people.get(&rm.peer).map(|p| if p.uid.is_empty() { p.id.clone() } else { p.uid.clone() }).unwrap_or_else(|| rm.peer.clone());
+            let on = hear && !self.local_mute.contains(&rm.peer) && !self.user_mute.contains(&who);
+            let vol = self.user_vol.get(&who).copied().unwrap_or(1.0).clamp(0.0, 2.0);
             if let (Some(a), Some(k)) = (&self.audio, &rm.key) {
-                a.set_gain(k, if on { 1.0 } else { 0.0 });
+                a.set_gain(k, if on { vol } else { 0.0 });
             }
         }
         if let Some(a) = &self.audio {

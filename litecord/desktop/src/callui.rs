@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use gpui_kit::component::slider::{Slider, SliderEvent, SliderState};
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::*;
 use gpui_kit::*;
@@ -57,6 +58,14 @@ pub struct CallUi {
     pub images: HashMap<String, (u64, Arc<RenderImage>)>,
     /// The tile shown big (click a tile to focus it).
     pub focus: Option<String>,
+    /// When the incoming ring and the outgoing "calling" tone play next (ms).
+    pub ring_at: i64,
+    pub calling_at: i64,
+    /// The person whose volume menu is open (uid or peer id, name), where it was opened, and its
+    /// slider.
+    pub menu: Option<(String, String, Point<Pixels>)>,
+    pub vol_slider: Option<Entity<SliderState>>,
+    pub vol_sub: Option<Subscription>,
 }
 
 impl LiteCord {
@@ -74,6 +83,7 @@ impl LiteCord {
                 }
             }));
             h.send(Cmd::Devices { mic: self.prefs.mic_device.clone(), speaker: self.prefs.speaker_device.clone() });
+            h.send(self.user_audio_cmd());
             self.call.engine = Some(h);
             cx.spawn(async move |this, cx| {
                 while let Ok(ev) = rx.recv().await {
@@ -95,7 +105,8 @@ impl LiteCord {
         match ev {
             CallEvent::Changed => {}
             CallEvent::Toast(t) => self.toast(&t, 6000),
-            CallEvent::Sound(_) | CallEvent::Chat(_) => {}
+            CallEvent::Sound(s) => self.sfx(s),
+            CallEvent::Chat(_) => {}
             CallEvent::Save(room, snap) => crate::rooms::save(&room, &snap),
         }
         let Some(h) = &self.call.engine else { return };
@@ -237,10 +248,35 @@ impl LiteCord {
         cx.notify();
     }
 
+    /// Everyone's volume and "mute for me" from Settings, for the engine.
+    pub(crate) fn user_audio_cmd(&self) -> Cmd {
+        Cmd::UserAudio {
+            vol: self.prefs.user_vol.clone(),
+            mute: self.prefs.user_mute.iter().cloned().collect(),
+        }
+    }
+
     /// Called every second: stop ringing after 30 seconds, both ways.
     pub(crate) fn call_tick(&mut self) -> bool {
         let now = now_ms();
         let mut dirty = false;
+        // The ring tones repeat like the web app's: incoming every 2.6 s, outgoing every 3 s.
+        if self.store.as_ref().is_some_and(|s| s.ringing.is_some()) {
+            if now >= self.call.ring_at {
+                self.sfx("ring");
+                self.call.ring_at = now + 2_600;
+            }
+        } else {
+            self.call.ring_at = 0;
+        }
+        if self.call.calling.is_some() {
+            if now >= self.call.calling_at {
+                self.sfx("calling");
+                self.call.calling_at = now + 3_000;
+            }
+        } else {
+            self.call.calling_at = 0;
+        }
         if self.call.calling.is_some_and(|u| u < now) {
             self.call.calling = None;
             dirty = true;
@@ -306,6 +342,13 @@ impl LiteCord {
                 }),
         );
         let k2 = key.clone();
+        if !me && kind == "user" {
+            let who = if p.uid.is_empty() { p.id.clone() } else { p.uid.clone() };
+            let name = p.name.clone();
+            t = t.on_mouse_down(MouseButton::Right, cx.listener(move |this, ev: &MouseDownEvent, _, cx| {
+                this.open_user_menu(who.clone(), name.clone(), ev.position, cx);
+            }));
+        }
         t.on_click(cx.listener(move |this, _, _, cx| {
             this.call.focus = if this.call.focus.as_deref() == Some(k2.as_str()) { None } else { Some(k2.clone()) };
             cx.notify();
@@ -578,6 +621,84 @@ impl LiteCord {
                 .on_click(cx.listener(|this, _, _, cx| this.toggle_deaf(cx)))
                 .into_any_element(),
         ]
+    }
+
+    /// Opens the User Volume menu for someone in the call (right-click their tile).
+    pub(crate) fn open_user_menu(&mut self, who: String, name: String, at: Point<Pixels>, cx: &mut Context<Self>) {
+        let cur = self.prefs.user_vol.get(&who).copied().unwrap_or(1.0);
+        let st = cx.new(|_| SliderState::new().min(0.).max(200.).step(5.).default_value((cur * 100.).round()));
+        let w = who.clone();
+        let sub = cx.subscribe(&st, move |this, _, ev: &SliderEvent, cx| {
+            let (SliderEvent::Change(v) | SliderEvent::Release(v)) = ev;
+            let v = (v.start() / 100.).clamp(0., 2.);
+            if (v - 1.0).abs() < 0.001 {
+                this.prefs.user_vol.remove(&w);
+            } else {
+                this.prefs.user_vol.insert(w.clone(), v);
+            }
+            if matches!(ev, SliderEvent::Release(_)) {
+                this.save_prefs();
+            }
+            let c = this.user_audio_cmd();
+            this.call_send(c, cx);
+            cx.notify();
+        });
+        self.call.menu = Some((who, name, at));
+        self.call.vol_slider = Some(st);
+        self.call.vol_sub = Some(sub);
+        cx.notify();
+    }
+
+    fn close_user_menu(&mut self, cx: &mut Context<Self>) {
+        if self.call.menu.take().is_some() {
+            self.save_prefs();
+        }
+        self.call.vol_slider = None;
+        self.call.vol_sub = None;
+        cx.notify();
+    }
+
+    /// The User Volume menu (web: the volume slider and "Mute" in a person's menu).
+    pub(crate) fn render_user_menu(&self, cx: &mut Context<Self>) -> Option<Div> {
+        let (who, name, at) = self.call.menu.clone()?;
+        let st = self.call.vol_slider.clone()?;
+        let vol = (self.prefs.user_vol.get(&who).copied().unwrap_or(1.0) * 100.).round() as u32;
+        let muted = self.prefs.user_mute.iter().any(|m| *m == who);
+        let w2 = who.clone();
+        Some(
+            div().absolute().size_full()
+                .child(div().id("umbackdrop").absolute().size_full()
+                    .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_user_menu(cx)))
+                    .on_mouse_down(MouseButton::Right, cx.listener(|this, _, _, cx| this.close_user_menu(cx))))
+                .child(
+                    div().id("umenu").absolute().left(at.x).top(at.y).w(u(240.)).p(u(8.)).rounded(u(8.)).bg(c_float()).shadow_lg().border_1().border_color(c_border())
+                        .flex().flex_col().gap(u(6.)).text_color(c_text())
+                        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                        .child(div().px(u(8.)).pt(u(4.)).font_weight(FontWeight::BOLD).text_color(c_strong()).truncate().child(name))
+                        .child(div().px(u(8.)).flex().justify_between().text_xs().font_weight(FontWeight::BOLD).text_color(c_muted())
+                            .child("USER VOLUME").child(format!("{vol}%")))
+                        .child(div().px(u(8.)).py(u(4.)).child(Slider::new(&st)))
+                        .child(
+                            div().id("ummute").px(u(8.)).py(u(6.)).rounded(u(4.)).flex().items_center().justify_between().cursor_pointer()
+                                .hover(|d| d.bg(c_hover()).text_color(c_strong()))
+                                .child("Mute")
+                                .child(div().size(u(18.)).rounded(u(4.)).border_1().border_color(if muted { c_accent() } else { c_muted() })
+                                    .when(muted, |d| d.bg(c_accent())).flex().items_center().justify_center()
+                                    .when(muted, |d| d.child(Icon::new(IconName::Check).size(u(14.)).text_color(white()))))
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    if this.prefs.user_mute.iter().any(|m| *m == w2) {
+                                        this.prefs.user_mute.retain(|m| *m != w2);
+                                    } else {
+                                        this.prefs.user_mute.push(w2.clone());
+                                    }
+                                    this.save_prefs();
+                                    let c = this.user_audio_cmd();
+                                    this.call_send(c, cx);
+                                    cx.notify();
+                                })),
+                        ),
+                ),
+        )
     }
 
     /// The incoming call card (web: `.ringcard`).

@@ -153,7 +153,7 @@ impl Audio {
     }
 }
 
-fn find_device(input: bool, name: &str) -> Option<cpal::Device> {
+pub(crate) fn find_device(input: bool, name: &str) -> Option<cpal::Device> {
     let host = cpal::default_host();
     if !name.is_empty() {
         let list = if input { host.input_devices().ok() } else { host.output_devices().ok() };

@@ -49,8 +49,15 @@ desktop app and browsers.
   join, and see who's in each. Your copy of each server is saved, so it survives everyone
   leaving, like the browser's copy
 
+- **Sounds**, the same ones as the web app (made in code, not recordings): joining and leaving,
+  people joining your call, mute and deafen, streams, new messages, friend requests, and ringing
+  for incoming and outgoing calls. Turn each one off, or change their volume, in
+  **Settings › Notifications**
+- **User Volume**: right-click someone in a call to make them quieter or louder (0 to 200%), or
+  mute them just for you. It's remembered for that person
+
 Not yet: sending files (received files show their name), forums (they open in the browser),
-stage moderation, per-person volume, call sounds and ringtones, and choosing a camera.
+stage moderation, and choosing a camera.
 
 ## Run it
 
@@ -111,6 +118,7 @@ instead of a camera, and `LC_DEBUG=1` / `LC_WEBRTC_LOG=1` print signaling and li
 - `src/servers.rs`: servers in the rail, their channels, text chat and voice channels
 - `src/rooms.rs`: saved copies of servers
 - `src/callbot.rs`: the headless call tester
+- `src/sfx.rs`: sound effects, drawn in code like the web app's
 - `src/prefs.rs`: settings, themes, zoom, and detecting your desktop's window buttons
 - `src/settings.rs`: the User Settings screen
 - `src/titlebar.rs`: the custom title bar
@@ -130,4 +138,4 @@ stops decoding new incoming audio once everyone who was there earlier has left.
 ## Next steps
 
 1. Files in chats and DMs, forums
-2. Call sounds and ringtones, per-person volume, stage moderation, camera picker
+2. Stage moderation, camera picker

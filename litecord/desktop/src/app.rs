@@ -437,7 +437,11 @@ impl LiteCord {
             }
             NetEvent::Text(t) => {
                 let was_ringing = store.ringing.as_ref().map(|r| r.from.clone());
+                // Friend requests in, and ours that were accepted, play the friend sound.
+                let friendish = |st: &Store| st.me.friends.values().filter(|f| matches!(f.state, FriendState::In | FriendState::Friend)).count();
+                let friends_before = friendish(store);
                 let touched = store.on_text(&t);
+                let friend_sound = friendish(store) > friends_before;
                 if let Some(r) = store.ringing.as_ref().filter(|r| Some(&r.from) != was_ringing.as_ref()) {
                     if self.prefs.notify && self.prefs.status != "dnd" {
                         let body = if r.video { format!("{} is video calling you", r.name) } else { format!("{} is calling you", r.name) };
@@ -454,12 +458,33 @@ impl LiteCord {
                         alert.push(k);
                     }
                 }
+                let message_sound = alert.iter().any(|k| self.from_someone_else(k));
                 for k in alert {
                     self.notify_message(&k);
+                }
+                if friend_sound {
+                    self.sfx("friend");
+                }
+                if message_sound && self.prefs.status != "dnd" {
+                    self.sfx("message");
                 }
             }
         }
         self.after_change(cx);
+    }
+
+    /// Whether a DM's newest message is a real one from someone else.
+    fn from_someone_else(&self, key: &str) -> bool {
+        let Some(store) = &self.store else { return false };
+        store.me.msgs.get(key).and_then(|v| v.last()).is_some_and(|m| !m.sys && m.uid != store.me.uid)
+    }
+
+    /// Plays a sound effect, unless it's turned off in Settings.
+    pub(crate) fn sfx(&self, name: &str) {
+        if self.prefs.sounds_off.iter().any(|s| s == crate::sfx::setting_of(name)) {
+            return;
+        }
+        crate::sfx::play(name, &self.prefs.speaker_device, self.prefs.sfx_vol);
     }
 
     /// A desktop notification for a new DM, unless you're looking at it or on Do Not Disturb.
@@ -1637,6 +1662,7 @@ impl Render for LiteCord {
                 )
             })
             .when(self.settings.is_none(), |d| d.children(self.render_ring_card(cx)))
+            .when(self.settings.is_none(), |d| d.children(self.render_user_menu(cx)))
             .children(toast.map(|(t, _)| {
                 div().absolute().bottom(u(80.)).left_0().right_0().flex().justify_center().child(
                     div()

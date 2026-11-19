@@ -39,6 +39,9 @@ pub enum Cmd {
     Screen(Option<Option<u64>>),
     /// Turn someone's audio off just for us.
     LocalMute(String, bool),
+    /// How loud each person is for us (0 to 2) and who we muted for ourselves, by uid (or by
+    /// peer id for someone without one). Replaces the previous lists.
+    UserAudio { vol: std::collections::HashMap<String, f32>, mute: std::collections::HashSet<String> },
     Chat { ch: String, text: String },
     Typing(String),
     Status { status: String, custom: String },

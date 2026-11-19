@@ -11,6 +11,7 @@ mod servers;
 mod net;
 mod prefs;
 mod settings;
+mod sfx;
 mod store;
 mod titlebar;
 

@@ -40,6 +40,13 @@ pub struct Prefs {
     pub speaker_device: String,
     /// Servers (rooms) you joined, in rail order.
     pub servers: Vec<String>,
+    /// Sound effects you turned off, by name (see `sfx::LABELS`), and their volume (0 to 1).
+    pub sounds_off: Vec<String>,
+    pub sfx_vol: f32,
+    /// How loud each person is for you in calls (0 to 2, by uid; missing = 1), and who you muted
+    /// for yourself. Like the web app's User Volume and "Mute".
+    pub user_vol: std::collections::HashMap<String, f32>,
+    pub user_mute: Vec<String>,
 }
 
 impl Default for Prefs {
@@ -65,6 +72,10 @@ impl Default for Prefs {
             mic_device: String::new(),
             speaker_device: String::new(),
             servers: Vec::new(),
+            sounds_off: Vec::new(),
+            sfx_vol: 0.6,
+            user_vol: Default::default(),
+            user_mute: Vec::new(),
         }
     }
 }

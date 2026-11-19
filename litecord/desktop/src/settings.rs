@@ -67,7 +67,7 @@ fn sections() -> Vec<(&'static str, Vec<Item>)> {
                 Item { page: Page::Appearance, label: "Appearance", icon: IconName::Palette, words: "theme dark light ash onyx zoom scale size font compact cozy" },
                 Item { page: Page::Window, label: window_label(), icon: IconName::Frame, words: "title bar border frame decorations minimize maximize close buttons native" },
                 Item { page: Page::Voice, label: "Voice & Video", icon: IconName::Mic, words: "microphone mic speakers headphones output input audio device call camera" },
-                Item { page: Page::Notifications, label: "Notifications", icon: IconName::Bell, words: "desktop alerts preview" },
+                Item { page: Page::Notifications, label: "Notifications", icon: IconName::Bell, words: "desktop alerts preview sounds sound effects ringtone volume" },
                 Item { page: Page::Keybinds, label: "Keybinds", icon: IconName::SquareTerminal, words: "shortcuts keys keyboard" },
                 Item { page: Page::Language, label: "Language & Time", icon: IconName::Globe, words: "clock 12 24 hour time" },
                 Item { page: Page::Advanced, label: "Advanced", icon: IconName::Settings, words: "server data folder version" },
@@ -689,6 +689,43 @@ impl LiteCord {
                     }),
                 ),
             )
+            .child(self.sounds_section(cx))
+    }
+
+    /// Sound effects: their volume, and each one on or off (the same sounds as the web app).
+    fn sounds_section(&mut self, cx: &mut Context<Self>) -> Div {
+        let vol = (self.prefs.sfx_vol * 100.).round() as u32;
+        let mut sec = section("Sounds")
+            .child(div().font_weight(FontWeight::MEDIUM).text_color(c_strong()).child(format!("Sound Effects Volume: {vol}%")))
+            .child(div().flex().flex_wrap().gap(u(8.)).children([0u32, 25, 40, 60, 80, 100].into_iter().map(|v| {
+                chip(SharedString::from(format!("sfxvol{v}")), if v == 0 { "Off".to_string() } else { format!("{v}%") }, vol == v)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.prefs.sfx_vol = v as f32 / 100.;
+                        this.save_prefs();
+                        this.sfx("message");
+                        cx.notify();
+                    }))
+            })));
+        for (key, label) in crate::sfx::LABELS {
+            let on = !self.prefs.sounds_off.iter().any(|s| s == key);
+            let k = key.to_string();
+            let preview = key.to_string();
+            sec = sec.child(
+                div().flex().items_center().gap(u(8.))
+                    .child(div().flex_1().child(toggle_row(label, "", Switch::new(SharedString::from(format!("sfx-{key}"))).checked(on).on_click(cx.listener(move |this, on: &bool, _, cx| {
+                        this.prefs.sounds_off.retain(|s| *s != k);
+                        if !*on {
+                            this.prefs.sounds_off.push(k.clone());
+                        }
+                        this.save_prefs();
+                        cx.notify();
+                    })))))
+                    .child(Button::new(SharedString::from(format!("sfxplay-{key}"))).small().ghost().label("Play").on_click(cx.listener(move |this, _, _, _| {
+                        crate::sfx::play(&preview, &this.prefs.speaker_device, this.prefs.sfx_vol.max(0.3));
+                    }))),
+            );
+        }
+        sec
     }
 
     fn page_voice(&mut self, cx: &mut Context<Self>) -> Div {
