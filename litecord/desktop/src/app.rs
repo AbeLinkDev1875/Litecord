@@ -187,6 +187,8 @@ pub struct LiteCord {
     pub(crate) server_rows_len: usize,
     /// Microphones and speakers found (for Settings › Voice & Video).
     pub(crate) audio_devices: Option<(Vec<String>, Vec<String>)>,
+    pub(crate) voice: crate::voiceui::VoiceUi,
+    pub(crate) update: crate::update::UpdateUi,
     _subs: Vec<Subscription>,
 }
 
@@ -330,6 +332,8 @@ impl LiteCord {
             server_rows_for: None,
             server_rows_len: 0,
             audio_devices: None,
+            voice: Default::default(),
+            update: Default::default(),
             _subs: subs,
         };
         app.apply_look(cx);
@@ -1630,6 +1634,28 @@ impl Render for LiteCord {
             .on_action(cx.listener(Self::zoom_reset))
             .on_action(cx.listener(Self::toggle_settings))
             .on_action(cx.listener(Self::close_overlay))
+            // Push to talk (and picking its key) sees every key and side mouse button first.
+            .capture_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| {
+                if !e.is_held && this.voice_key(&e.keystroke.key, true, cx) {
+                    cx.stop_propagation();
+                }
+            }))
+            .capture_key_up(cx.listener(|this, e: &KeyUpEvent, _, cx| {
+                this.voice_key(&e.keystroke.key, false, cx);
+            }))
+            .capture_any_mouse_down(cx.listener(|this, e: &MouseDownEvent, _, cx| {
+                if let MouseButton::Navigate(n) = e.button {
+                    let k = if n == NavigationDirection::Back { "mouse4" } else { "mouse5" };
+                    if this.voice_key(k, true, cx) {
+                        cx.stop_propagation();
+                    }
+                }
+            }))
+            .capture_any_mouse_up(cx.listener(|this, e: &MouseUpEvent, _, cx| {
+                if let MouseButton::Navigate(n) = e.button {
+                    this.voice_key(if n == NavigationDirection::Back { "mouse4" } else { "mouse5" }, false, cx);
+                }
+            }))
             .size_full()
             .relative()
             .flex()
@@ -1639,6 +1665,10 @@ impl Render for LiteCord {
             .text_size(u(15.))
             .child(self.render_title_bar(&title, window, cx))
             .child(div().flex_1().min_h(px(0.)).relative().child(content))
+            // With the system's own title bar, the update button sits at the top right of the window.
+            .when(!self.custom_frame(window), |d| {
+                d.children(self.render_update_button(cx).map(|b| div().absolute().top(u(10.)).right(u(12.)).child(b)))
+            })
             .when(self.status_menu && self.store.is_some() && self.settings.is_none(), |d| {
                 d.child(
                     div()

@@ -6,6 +6,11 @@
 //! Everyone we hear arrives as a `NativeAudioStream` per person; each gets a small queue that
 //! the speaker callback mixes (with that person's volume: 0 when deafened or muted for us).
 //! What we play is also fed to the echo canceller, so it can take it out of the microphone.
+//!
+//! The microphone path, every 10 ms, like the web app's: input volume, AI noise suppression
+//! (RNNoise) if picked, WebRTC's processing (echo cancellation, gain control, standard noise
+//! suppression), then the voice gate (voice activity or push to talk). A Mic Test plays the
+//! result back to you.
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -38,8 +43,78 @@ struct Remote {
     frames: u64,
 }
 
+/// The voice gate's settings (see `VoiceOpts::effective`).
+#[derive(Clone)]
+struct GateCfg {
+    ptt: bool,
+    auto: bool,
+    threshold: f32,
+    ptt_delay_ms: u32,
+}
+
+/// Lets the voice through when it's loud enough (or while push-to-talk is held), with a short
+/// hold so word endings aren't cut. A port of the web app's voice-gate.js, per 10 ms.
+struct Gate {
+    floor: f32,
+    hold: usize,
+    gain: f32,
+    level: f32,
+    ptt_at: Option<std::time::Instant>,
+}
+
+impl Gate {
+    fn new() -> Self {
+        Gate { floor: -70.0, hold: 0, gain: 0.0, level: -100.0, ptt_at: None }
+    }
+    /// Gates `c` in place. Returns (level dB, threshold dB, open).
+    fn run(&mut self, c: &mut [i16], cfg: &GateCfg, ptt_down: bool) -> (f32, f32, bool) {
+        let sum: f32 = c.iter().map(|s| (*s as f32 / 32768.0).powi(2)).sum();
+        let db = 10.0 * (sum / c.len().max(1) as f32 + 1e-12).log10();
+        self.level = db.max(self.level - 2.25); // the meter falls back slowly
+        // Background noise: follows quiet moments quickly, creeps up about 1 dB a second.
+        self.floor = if db < self.floor { self.floor * 0.674 + db * 0.326 } else { self.floor + 0.0094 };
+        let threshold = if cfg.auto { (self.floor + 15.0).clamp(-62.0, -28.0) } else { cfg.threshold };
+        let open = if cfg.ptt {
+            if ptt_down {
+                self.ptt_at = Some(std::time::Instant::now());
+                true
+            } else {
+                self.ptt_at.map(|t| t.elapsed().as_millis() < cfg.ptt_delay_ms as u128).unwrap_or(false)
+            }
+        } else {
+            if db > threshold {
+                self.hold = RATE as usize * 35 / 100;
+            } else {
+                self.hold = self.hold.saturating_sub(c.len());
+            }
+            self.hold > 0
+        };
+        // Open fast, fade out gently.
+        let (target, step) = if open { (1.0, 0.02) } else { (0.0, 0.0006) };
+        for s in c.iter_mut() {
+            self.gain += (target - self.gain) * step;
+            *s = (*s as f32 * self.gain) as i16;
+        }
+        (self.level, threshold, open)
+    }
+}
+
 pub struct Shared {
     apm: Mutex<AudioProcessingModule>,
+    /// (echo cancellation, gain control, standard noise suppression) the processing was made with.
+    apm_flags: Mutex<(bool, bool, bool)>,
+    ns_ai: AtomicBool,
+    gate: Mutex<GateCfg>,
+    /// Push-to-talk key held.
+    pub ptt: AtomicBool,
+    in_gain: AtomicU32,
+    out_gain: AtomicU32,
+    /// For Settings' meter: level and threshold in dB, and whether the voice gets through.
+    meter_db: AtomicU32,
+    meter_thr: AtomicU32,
+    meter_open: AtomicBool,
+    /// Mic Test: play the microphone back to us.
+    test: AtomicBool,
     remotes: Mutex<HashMap<String, Remote>>,
     mic_level: AtomicU32,
     /// Send silence instead of the microphone (muted or deafened).
@@ -49,9 +124,12 @@ pub struct Shared {
 }
 
 enum Ctl {
-    Start { mic: String, speaker: String, source: Option<NativeAudioSource>, rt: tokio::runtime::Handle },
+    Start { mic: String, speaker: String, source: Option<NativeAudioSource>, rt: Option<tokio::runtime::Handle>, input: bool },
     Stop,
 }
+
+/// Where a Mic Test plays you back.
+const TEST_KEY: &str = "\u{0}mic-test";
 
 /// The audio thread (cpal streams can't move between threads on every platform).
 pub struct Audio {
@@ -63,7 +141,17 @@ pub struct Audio {
 impl Audio {
     pub fn new() -> Audio {
         let shared = Arc::new(Shared {
-            apm: Mutex::new(AudioProcessingModule::new(true, true, true, true)),
+            apm: Mutex::new(AudioProcessingModule::new(true, true, true, false)),
+            apm_flags: Mutex::new((true, true, false)),
+            ns_ai: AtomicBool::new(true),
+            gate: Mutex::new(GateCfg { ptt: false, auto: true, threshold: -50.0, ptt_delay_ms: 20 }),
+            ptt: AtomicBool::new(false),
+            in_gain: AtomicU32::new(f32_bits(1.0)),
+            out_gain: AtomicU32::new(f32_bits(1.0)),
+            meter_db: AtomicU32::new(f32_bits(-100.0)),
+            meter_thr: AtomicU32::new(f32_bits(-50.0)),
+            meter_open: AtomicBool::new(false),
+            test: AtomicBool::new(false),
             remotes: Mutex::new(HashMap::new()),
             mic_level: AtomicU32::new(0),
             mic_off: AtomicBool::new(false),
@@ -81,7 +169,45 @@ impl Audio {
 
     /// Opens the microphone (feeding `source`, if any) and the speakers.
     pub fn start(&self, mic: &str, speaker: &str, source: Option<NativeAudioSource>) {
-        let _ = self.ctl.send(Ctl::Start { mic: mic.into(), speaker: speaker.into(), source, rt: tokio::runtime::Handle::current() });
+        let input = source.is_some();
+        let _ = self.ctl.send(Ctl::Start { mic: mic.into(), speaker: speaker.into(), source, rt: tokio::runtime::Handle::try_current().ok(), input });
+    }
+
+    /// Mic Test: opens the microphone and speakers and plays you back to yourself.
+    pub fn start_test(&self, mic: &str, speaker: &str) {
+        self.shared.test.store(true, Ordering::Relaxed);
+        self.add_remote(TEST_KEY, 1.0);
+        let _ = self.ctl.send(Ctl::Start { mic: mic.into(), speaker: speaker.into(), source: None, rt: None, input: true });
+    }
+
+    /// Applies microphone and speaker settings.
+    pub fn apply(&self, v: &super::VoiceOpts) {
+        let (ns, ec, agc, mode, auto, thr) = v.effective();
+        let sh = &self.shared;
+        sh.in_gain.store(f32_bits(v.in_vol.clamp(0.0, 2.0)), Ordering::Relaxed);
+        sh.out_gain.store(f32_bits(v.out_vol.clamp(0.0, 2.0)), Ordering::Relaxed);
+        sh.ns_ai.store(ns == "ai", Ordering::Relaxed);
+        if let Ok(mut g) = sh.gate.lock() {
+            *g = GateCfg { ptt: mode == "ptt", auto, threshold: thr, ptt_delay_ms: v.ptt_delay_ms };
+        }
+        let flags = (ec, agc, ns == "standard");
+        if let (Ok(mut f), Ok(mut apm)) = (sh.apm_flags.lock(), sh.apm.lock()) {
+            if *f != flags {
+                *f = flags;
+                *apm = AudioProcessingModule::new(ec, agc, ec || agc || ns != "off", ns == "standard");
+            }
+        }
+    }
+
+    /// Push-to-talk key held or let go.
+    pub fn set_ptt(&self, down: bool) {
+        self.shared.ptt.store(down, Ordering::Relaxed);
+    }
+
+    /// Settings' meter: (level dB, threshold dB, voice getting through).
+    pub fn meter(&self) -> (f32, f32, bool) {
+        let sh = &self.shared;
+        (bits_f32(sh.meter_db.load(Ordering::Relaxed)), bits_f32(sh.meter_thr.load(Ordering::Relaxed)), sh.meter_open.load(Ordering::Relaxed))
     }
 
     /// Closes the microphone and speakers (we left the call).
@@ -176,14 +302,15 @@ fn audio_thread(rx: mpsc::Receiver<Ctl>, shared: Arc<Shared>, errors: Arc<Mutex<
     while let Ok(c) = rx.recv() {
         match c {
             Ctl::Stop => streams.clear(),
-            Ctl::Start { mic, speaker, source, rt } => {
+            Ctl::Start { mic, speaker, source, rt, input } => {
                 streams.clear();
                 match open_output(&speaker, shared.clone()) {
                     Ok(s) => streams.push(s),
                     Err(e) => err(format!("Couldn't open your speakers: {e}")),
                 }
-                if let Some(src) = source {
-                    match open_input(&mic, shared.clone(), src, rt) {
+                if input {
+                    let send = source.zip(rt);
+                    match open_input(&mic, shared.clone(), send) {
                         Ok(s) => streams.push(s),
                         Err(e) => err(format!("Couldn't use your microphone: {e}. You can still listen.")),
                     }
@@ -228,22 +355,28 @@ impl Resampler {
     }
 }
 
-fn open_input(name: &str, shared: Arc<Shared>, source: NativeAudioSource, rt: tokio::runtime::Handle) -> Result<cpal::Stream, String> {
+fn open_input(name: &str, shared: Arc<Shared>, send: Option<(NativeAudioSource, tokio::runtime::Handle)>) -> Result<cpal::Stream, String> {
     let dev = find_device(true, name).ok_or("no microphone found")?;
     let cfg = dev.default_input_config().map_err(|e| e.to_string())?;
     let channels = cfg.channels() as usize;
     let rate = cfg.sample_rate();
     // Hand the cleaned-up 10 ms chunks to WebRTC on the engine's runtime.
-    let (tx, mut chunks) = tokio::sync::mpsc::unbounded_channel::<Vec<i16>>();
-    rt.spawn(async move {
-        while let Some(c) = chunks.recv().await {
-            let frame = AudioFrame { data: c.into(), sample_rate: RATE, num_channels: 1, samples_per_channel: CHUNK as u32 };
-            let _ = source.capture_frame(&frame).await;
-        }
+    let tx = send.map(|(source, rt)| {
+        let (tx, mut chunks) = tokio::sync::mpsc::unbounded_channel::<Vec<i16>>();
+        rt.spawn(async move {
+            while let Some(c) = chunks.recv().await {
+                let frame = AudioFrame { data: c.into(), sample_rate: RATE, num_channels: 1, samples_per_channel: CHUNK as u32 };
+                let _ = source.capture_frame(&frame).await;
+            }
+        });
+        tx
     });
     let mut rs = Resampler::new(rate, RATE);
     let mut mono: Vec<f32> = Vec::new();
     let mut pending: Vec<f32> = Vec::new();
+    let mut denoise = nnnoiseless::DenoiseState::new();
+    let (mut ai_in, mut ai_out) = (vec![0f32; CHUNK], vec![0f32; CHUNK]);
+    let mut gate = Gate::new();
     let mut handle = move |data: &[f32]| {
         mono.clear();
         for f in data.chunks(channels) {
@@ -251,11 +384,26 @@ fn open_input(name: &str, shared: Arc<Shared>, source: NativeAudioSource, rt: to
         }
         rs.run(&mono, &mut pending);
         while pending.len() >= CHUNK {
-            let mut c: Vec<i16> = pending.drain(..CHUNK).map(|f| (f.clamp(-1.0, 1.0) * 32767.0) as i16).collect();
+            let gain = bits_f32(shared.in_gain.load(Ordering::Relaxed));
+            let mut c: Vec<i16> = if shared.ns_ai.load(Ordering::Relaxed) {
+                // RNNoise works on 480 samples at 48 kHz, in 16-bit scale.
+                for (d, s) in ai_in.iter_mut().zip(pending.drain(..CHUNK)) {
+                    *d = (s * gain).clamp(-1.0, 1.0) * 32767.0;
+                }
+                denoise.process_frame(&mut ai_out, &ai_in);
+                ai_out.iter().map(|f| f.clamp(-32768.0, 32767.0) as i16).collect()
+            } else {
+                pending.drain(..CHUNK).map(|f| ((f * gain).clamp(-1.0, 1.0) * 32767.0) as i16).collect()
+            };
             if let Ok(mut apm) = shared.apm.lock() {
                 let _ = apm.process_stream(&mut c, RATE as i32, 1);
             }
-            let off = shared.mic_off.load(Ordering::Relaxed);
+            let cfg = shared.gate.lock().map(|g| g.clone()).unwrap_or(GateCfg { ptt: false, auto: true, threshold: -50.0, ptt_delay_ms: 0 });
+            let (db, thr, open) = gate.run(&mut c, &cfg, shared.ptt.load(Ordering::Relaxed));
+            shared.meter_db.store(f32_bits(db), Ordering::Relaxed);
+            shared.meter_thr.store(f32_bits(thr), Ordering::Relaxed);
+            shared.meter_open.store(open, Ordering::Relaxed);
+            let off = shared.mic_off.load(Ordering::Relaxed) && !shared.test.load(Ordering::Relaxed);
             let mut sum = 0f32;
             for s in &c {
                 let f = *s as f32 / 32768.0;
@@ -267,7 +415,12 @@ fn open_input(name: &str, shared: Arc<Shared>, source: NativeAudioSource, rt: to
             if off {
                 c.iter_mut().for_each(|s| *s = 0);
             }
-            let _ = tx.send(c);
+            if shared.test.load(Ordering::Relaxed) {
+                Audio::push(&shared, TEST_KEY, &c);
+            }
+            if let Some(tx) = &tx {
+                let _ = tx.send(c);
+            }
         }
     };
     let config: cpal::StreamConfig = cfg.config();
@@ -308,6 +461,7 @@ fn open_output(name: &str, shared: Arc<Shared>) -> Result<cpal::Stream, String> 
             mix48.clear();
             mix48.resize(CHUNK, 0.0);
             let deaf = shared.deaf.load(Ordering::Relaxed);
+            let out_gain = bits_f32(shared.out_gain.load(Ordering::Relaxed));
             if let Ok(mut r) = shared.remotes.lock() {
                 for q in r.values_mut() {
                     if !q.started {
@@ -319,7 +473,7 @@ fn open_output(name: &str, shared: Arc<Shared>) -> Result<cpal::Stream, String> 
                     if q.queue.len() < CHUNK {
                         q.started = false; // ran dry: wait for a little to build up again
                     }
-                    let g = if deaf { 0.0 } else { q.gain };
+                    let g = if deaf { 0.0 } else { q.gain * out_gain };
                     for m in mix48.iter_mut() {
                         match q.queue.pop_front() {
                             Some(s) => *m += s * g,

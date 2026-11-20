@@ -119,6 +119,7 @@ impl LiteCord {
                     )
                     .child(div().text_size(u(13.)).font_weight(FontWeight::SEMIBOLD).text_color(c_text()).child(title.to_string())),
             )
+            .children(self.render_update_button(cx))
             .child(buttons(right, "r"))
             .into_any_element()
     }

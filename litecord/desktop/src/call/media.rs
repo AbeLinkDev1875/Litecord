@@ -122,6 +122,14 @@ struct Engine {
     mic_failed: bool,
     cam: Option<(Local, video::Capture)>,
     screen: Option<(Local, video::Capture)>,
+    /// The running screen share's sound and live quality limits.
+    screen_audio: Option<super::share_audio::ShareAudio>,
+    screen_limits: Option<Arc<video::Limits>>,
+    voice: super::VoiceOpts,
+    share_q: super::Quality,
+    share_sound: String,
+    cam_device: String,
+    cam_q: super::Quality,
     local_mute: HashSet<String>,
     user_vol: HashMap<String, f32>,
     user_mute: HashSet<String>,
@@ -165,6 +173,13 @@ pub fn spawn(base: String, events: async_channel::Sender<CallEvent>, view: Arc<M
                     mic_failed: false,
                     cam: None,
                     screen: None,
+                    screen_audio: None,
+                    screen_limits: None,
+                    voice: super::VoiceOpts::default(),
+                    share_q: super::Quality { height: 1080, fps: 30, mbps: 0.0 },
+                    share_sound: super::share_audio::ALL.into(),
+                    cam_device: String::new(),
+                    cam_q: super::Quality { height: 720, fps: 30, mbps: 0.0 },
                     local_mute: HashSet::new(),
                     user_vol: HashMap::new(),
                     user_mute: HashSet::new(),
@@ -333,6 +348,41 @@ impl Engine {
             }
             Cmd::Camera(on) => {
                 if on { self.start_camera() } else { self.stop_camera() }
+            }
+            Cmd::Voice(v) => {
+                self.voice = v;
+                if let Some(a) = &self.audio {
+                    a.apply(&self.voice);
+                }
+            }
+            Cmd::Ptt(down) => {
+                if let Some(a) = &self.audio {
+                    a.set_ptt(down);
+                }
+            }
+            Cmd::Share { quality, sound } => {
+                self.share_sound = sound;
+                if quality != self.share_q {
+                    self.share_q = quality;
+                    if let Some(l) = &self.screen_limits {
+                        l.set(&self.share_q);
+                    }
+                    let (br, fps) = (self.share_q.bitrate(true), self.share_q.fps as f64);
+                    for p in self.peers.values() {
+                        if let Some((_, senders)) = p.out.get("screen") {
+                            set_video_limits(senders, br, fps);
+                        }
+                    }
+                }
+            }
+            Cmd::Cam { device, quality } => {
+                let changed = device != self.cam_device || quality != self.cam_q;
+                self.cam_device = device;
+                self.cam_q = quality;
+                if changed && self.cam.is_some() {
+                    self.stop_camera();
+                    self.start_camera();
+                }
             }
             Cmd::Screen(Some(src)) => self.start_screen(src),
             Cmd::Screen(None) => self.stop_screen(),
@@ -580,7 +630,12 @@ impl Engine {
     // ---------- media ----------
 
     fn audio(&mut self) -> &super::audio::Audio {
-        self.audio.get_or_insert_with(super::audio::Audio::new)
+        if self.audio.is_none() {
+            let a = super::audio::Audio::new();
+            a.apply(&self.voice);
+            self.audio = Some(a);
+        }
+        self.audio.as_ref().expect("audio")
     }
 
     /// Opens the microphone (when we may speak) and speakers while we're in a call, and
@@ -1058,9 +1113,10 @@ impl Engine {
         let gen = self.gen;
         let tx = self.tx.clone();
         let my_id = self.room.as_ref().map(|r| r.my_id.clone()).unwrap_or_default();
-        match video::Capture::camera(&self.frames, &format!("{my_id}:cam"), Box::new(move || { let _ = tx.send(Ev::CaptureEnded("cam", gen)); })) {
+        let limits = video::Limits::new(&self.cam_q);
+        match video::Capture::camera(&self.frames, &format!("{my_id}:cam"), &self.cam_device, limits, Box::new(move || { let _ = tx.send(Ev::CaptureEnded("cam", gen)); })) {
             Ok((track, cap)) => {
-                let enc = RtpEncodingParameters { max_bitrate: Some(1_500_000), max_framerate: Some(30.0), ..Default::default() };
+                let enc = RtpEncodingParameters { max_bitrate: Some(self.cam_q.bitrate(false)), max_framerate: Some(self.cam_q.fps as f64), ..Default::default() };
                 let sid = format!("cam-{}", super::room::rid(6));
                 self.cam = Some((Local { stream_id: sid.clone(), tracks: vec![Src::Video(track)], enc: Some(enc), gen }, cap));
                 if let Some(r) = self.room.as_mut() {
@@ -1094,11 +1150,24 @@ impl Engine {
         let gen = self.gen;
         let tx = self.tx.clone();
         let my_id = self.room.as_ref().map(|r| r.my_id.clone()).unwrap_or_default();
-        match video::Capture::screen(&self.frames, &format!("{my_id}:screen"), source, Box::new(move || { let _ = tx.send(Ev::CaptureEnded("screen", gen)); })) {
+        let limits = video::Limits::new(&self.share_q);
+        match video::Capture::screen(&self.frames, &format!("{my_id}:screen"), source, limits.clone(), Box::new(move || { let _ = tx.send(Ev::CaptureEnded("screen", gen)); })) {
             Ok((track, cap)) => {
-                let enc = RtpEncodingParameters { max_bitrate: Some(4_000_000), max_framerate: Some(30.0), ..Default::default() };
+                let enc = RtpEncodingParameters { max_bitrate: Some(self.share_q.bitrate(true)), max_framerate: Some(self.share_q.fps as f64), ..Default::default() };
                 let sid = format!("screen-{}", super::room::rid(6));
-                self.screen = Some((Local { stream_id: sid.clone(), tracks: vec![Src::Video(track)], enc: Some(enc), gen }, cap));
+                let mut tracks = vec![Src::Video(track)];
+                // The stream's sound goes in the same stream as the picture, like a browser's.
+                let src = super::share_audio::source();
+                match super::share_audio::start(&self.share_sound, src.clone(), tokio::runtime::Handle::current()) {
+                    Ok(Some(sa)) => {
+                        tracks.push(Src::Audio(src));
+                        self.screen_audio = Some(sa);
+                    }
+                    Ok(None) => {}
+                    Err(e) => self.emit(CallEvent::Toast(format!("Your stream started without sound: {e}."))),
+                }
+                self.screen_limits = Some(limits);
+                self.screen = Some((Local { stream_id: sid.clone(), tracks, enc: Some(enc), gen }, cap));
                 if let Some(r) = self.room.as_mut() {
                     r.me.screen = Some(sid);
                     r.send_state();
@@ -1114,6 +1183,8 @@ impl Engine {
     fn stop_screen(&mut self) {
         if let Some((_, cap)) = self.screen.take() {
             cap.stop();
+            self.screen_audio = None;
+            self.screen_limits = None;
             if let Some(r) = self.room.as_mut() {
                 r.me.screen = None;
                 r.send_state();
@@ -1197,6 +1268,21 @@ fn same_view(a: &CallView, b: &CallView) -> bool {
         && a.history.iter().map(|(k, v)| (k.len(), v.len(), v.last().map(|m| m.text.len()))).collect::<Vec<_>>()
             == b.history.iter().map(|(k, v)| (k.len(), v.len(), v.last().map(|m| m.text.len()))).collect::<Vec<_>>()
         && a.typing == b.typing && a.video_kinds == b.video_kinds
+}
+
+/// Changes the bitrate and frame rate limits of a stream that's already being sent.
+fn set_video_limits(senders: &[libwebrtc::rtp_sender::RtpSender], bitrate: u64, fps: f64) {
+    for s in senders {
+        if !matches!(s.track(), Some(MediaStreamTrack::Video(_))) {
+            continue;
+        }
+        let mut prm = s.parameters();
+        for e in prm.encodings.iter_mut() {
+            e.max_bitrate = Some(bitrate);
+            e.max_framerate = Some(fps);
+        }
+        let _ = s.set_parameters(prm);
+    }
 }
 
 /// Adds or removes one of our streams on a connection (like the web app's setStream).

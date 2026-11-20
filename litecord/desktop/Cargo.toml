@@ -1,6 +1,6 @@
 [package]
 name = "litecord-desktop"
-version = "2.2.0"
+version = "2.3.0"
 edition = "2021"
 build = "build.rs"
 description = "LiteCord's native desktop app, in Rust with GPUI (via GPUI Kit)"
@@ -36,3 +36,11 @@ smallvec = "1"
 log = "0.4"
 cpal = "0.17"
 nokhwa = { version = "0.10", default-features = false, features = ["input-native"] }
+# AI noise suppression for the microphone (RNNoise in pure Rust), like the web app's.
+nnnoiseless = { version = "0.5.2", default-features = false }
+# Checks downloaded updates against the release's SHA256SUMS.txt.
+sha2 = "0.11.1"
+
+# Windows: stream sound from every app except LiteCord itself (process loopback).
+[target.'cfg(windows)'.dependencies]
+wasapi = "0.27.0"

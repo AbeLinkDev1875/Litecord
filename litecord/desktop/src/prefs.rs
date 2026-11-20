@@ -47,6 +47,34 @@ pub struct Prefs {
     /// for yourself. Like the web app's User Volume and "Mute".
     pub user_vol: std::collections::HashMap<String, f32>,
     pub user_mute: Vec<String>,
+    /// Microphone and speaker volume (0 to 2), and the web app's Input Profile settings:
+    /// "isolation", "studio" or "custom"; for custom, "vad" or "ptt", automatic or manual
+    /// sensitivity (dB), noise suppression ("ai", "standard", "off"), echo cancellation, gain.
+    pub in_vol: f32,
+    pub out_vol: f32,
+    pub input_profile: String,
+    pub input_mode: String,
+    pub auto_sens: bool,
+    pub sens: f32,
+    pub ns_mode: String,
+    pub ec: bool,
+    pub agc: bool,
+    /// Push-to-talk key (a GPUI key name like "v", "space", "f13", or "mouse4"/"mouse5") and how
+    /// long the mic stays open after letting go.
+    pub ptt_key: String,
+    pub ptt_delay: u32,
+    /// Camera by name ("" = the first) and its quality (height, frames a second, Mbps; 0 = Auto).
+    pub cam_device: String,
+    pub cam_res: u32,
+    pub cam_fps: u32,
+    pub cam_mbps: f32,
+    /// Screen share quality (height, 0 = Source) and its sound (see `call::share_audio`).
+    pub share_res: u32,
+    pub share_fps: u32,
+    pub share_mbps: f32,
+    pub share_sound: String,
+    /// Look for new versions on GitHub (the green button at the top right).
+    pub update_check: bool,
 }
 
 impl Default for Prefs {
@@ -76,7 +104,60 @@ impl Default for Prefs {
             sfx_vol: 0.6,
             user_vol: Default::default(),
             user_mute: Vec::new(),
+            in_vol: 1.0,
+            out_vol: 1.0,
+            input_profile: "isolation".into(),
+            input_mode: "vad".into(),
+            auto_sens: true,
+            sens: -50.0,
+            ns_mode: "ai".into(),
+            ec: true,
+            agc: true,
+            ptt_key: String::new(),
+            ptt_delay: 20,
+            cam_device: String::new(),
+            cam_res: 720,
+            cam_fps: 30,
+            cam_mbps: 0.0,
+            share_res: 1080,
+            share_fps: 30,
+            share_mbps: 0.0,
+            share_sound: "all".into(),
+            update_check: true,
         }
+    }
+}
+
+impl Prefs {
+    pub fn voice_opts(&self) -> crate::call::VoiceOpts {
+        crate::call::VoiceOpts {
+            in_vol: self.in_vol,
+            out_vol: self.out_vol,
+            profile: self.input_profile.clone(),
+            mode: self.input_mode.clone(),
+            auto_sens: self.auto_sens,
+            sens: self.sens,
+            ns: self.ns_mode.clone(),
+            ec: self.ec,
+            agc: self.agc,
+            ptt_delay_ms: self.ptt_delay,
+        }
+    }
+    pub fn share_cmd(&self) -> crate::call::Cmd {
+        crate::call::Cmd::Share {
+            quality: crate::call::Quality { height: self.share_res, fps: self.share_fps, mbps: self.share_mbps },
+            sound: self.share_sound.clone(),
+        }
+    }
+    pub fn cam_cmd(&self) -> crate::call::Cmd {
+        crate::call::Cmd::Cam {
+            device: self.cam_device.clone(),
+            quality: crate::call::Quality { height: self.cam_res, fps: self.cam_fps, mbps: self.cam_mbps },
+        }
+    }
+    /// Push to talk is on (and has a key).
+    pub fn ptt_on(&self) -> bool {
+        self.input_profile == "custom" && self.input_mode == "ptt" && !self.ptt_key.is_empty()
     }
 }
 

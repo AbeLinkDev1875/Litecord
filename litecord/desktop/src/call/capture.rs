@@ -8,7 +8,7 @@
 //!   xdg-desktop-portal (PipeWire), so the system shows its own "share your screen" picker;
 //!   on X11 and Windows it captures the screen directly.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 
@@ -19,8 +19,39 @@ use libwebrtc::video_source::VideoResolution;
 
 use super::video::Frames;
 
+/// Live limits for a capture, changeable while it runs: the tallest picture to send (0 = as
+/// captured) and frames a second.
+pub struct Limits {
+    pub max_h: AtomicU32,
+    pub fps: AtomicU32,
+}
+
+impl Limits {
+    pub fn new(q: &super::Quality) -> Arc<Limits> {
+        let l = Arc::new(Limits { max_h: AtomicU32::new(0), fps: AtomicU32::new(30) });
+        l.set(q);
+        l
+    }
+    pub fn set(&self, q: &super::Quality) {
+        self.max_h.store(q.height, Ordering::Relaxed);
+        self.fps.store(q.fps.clamp(5, 60), Ordering::Relaxed);
+    }
+    fn frame_time(&self) -> Duration {
+        Duration::from_micros(1_000_000 / self.fps.load(Ordering::Relaxed).max(1) as u64)
+    }
+}
+
+/// The size to send a `w`×`h` picture at, no taller than `max_h` (0 = no limit), even numbers.
+pub fn fit(w: u32, h: u32, max_h: u32) -> (u32, u32) {
+    if max_h == 0 || h <= max_h || h == 0 {
+        return (w & !1, h & !1);
+    }
+    let nh = max_h & !1;
+    ((((w as u64 * nh as u64) / h as u64) as u32) & !1, nh)
+}
+
 /// Sends one BGRA picture to WebRTC (and, every few frames, to our preview).
-fn send_bgra(source: &NativeVideoSource, bgra: &[u8], stride: u32, w: u32, h: u32, start: Instant) {
+fn send_bgra(source: &NativeVideoSource, bgra: &[u8], stride: u32, w: u32, h: u32, max_h: u32, start: Instant) {
     let (w, h) = (w & !1, h & !1); // I420 wants even sizes
     if w == 0 || h == 0 {
         return;
@@ -29,6 +60,10 @@ fn send_bgra(source: &NativeVideoSource, bgra: &[u8], stride: u32, w: u32, h: u3
     let (sy, su, sv) = buf.strides();
     let (y, u, v) = buf.data_mut();
     yuv_helper::argb_to_i420(bgra, stride, y, sy, u, su, v, sv, w as i32, h as i32);
+    let (nw, nh) = fit(w, h, max_h);
+    if (nw, nh) != (w, h) && nw > 0 && nh > 0 {
+        buf = buf.scale(nw as i32, nh as i32);
+    }
     let mut frame = VideoFrame::new(VideoRotation::VideoRotation0, buf);
     frame.timestamp_us = start.elapsed().as_micros() as i64;
     source.capture_frame(&frame);
@@ -64,7 +99,22 @@ impl Preview {
     }
 }
 
-pub fn camera(frames: Frames, key: String, stop: Arc<AtomicBool>, ended: Box<dyn FnOnce() + Send>) -> Result<NativeVideoSource, String> {
+/// Cameras by name, for Settings.
+pub fn cameras() -> Vec<String> {
+    use nokhwa::utils::ApiBackend;
+    nokhwa::query(ApiBackend::Auto).unwrap_or_default().iter().map(|c| c.human_name()).collect()
+}
+
+/// The camera size closest to `height` (360, 720 or 1080).
+fn camera_size(height: u32) -> (u32, u32) {
+    match height {
+        0..=480 => (640, 360),
+        481..=900 => (1280, 720),
+        _ => (1920, 1080),
+    }
+}
+
+pub fn camera(frames: Frames, key: String, device: String, limits: Arc<Limits>, stop: Arc<AtomicBool>, ended: Box<dyn FnOnce() + Send>) -> Result<NativeVideoSource, String> {
     let source = NativeVideoSource::new(VideoResolution { width: 1280, height: 720 }, false);
     let src = source.clone();
     let (ok_tx, ok_rx) = mpsc::sync_channel::<Result<(), String>>(1);
@@ -88,21 +138,22 @@ pub fn camera(frames: Frames, key: String, stop: Arc<AtomicBool>, ended: Box<dyn
                         px[i + 3] = 255;
                     }
                 }
-                send_bgra(&src, &px, w * 4, w, h, start);
+                send_bgra(&src, &px, w * 4, w, h, limits.max_h.load(Ordering::Relaxed), start);
                 preview.offer(&px, w * 4, w, h);
                 n += 1;
-                std::thread::sleep(Duration::from_millis(33));
+                std::thread::sleep(limits.frame_time());
             }
             return;
         }
         use nokhwa::utils::{ApiBackend, CameraFormat, CameraIndex, FrameFormat, RequestedFormat, RequestedFormatType, Resolution};
         let cams = nokhwa::query(ApiBackend::Auto).unwrap_or_default();
-        let Some(info) = cams.first() else {
+        let Some(info) = cams.iter().find(|c| !device.is_empty() && c.human_name() == device).or(cams.first()) else {
             let _ = ok_tx.send(Err("no camera found".into()));
             return;
         };
+        let (cw, ch) = camera_size(limits.max_h.load(Ordering::Relaxed));
         let want = RequestedFormat::with_formats(
-            RequestedFormatType::Closest(CameraFormat::new(Resolution::new(1280, 720), FrameFormat::MJPEG, 30)),
+            RequestedFormatType::Closest(CameraFormat::new(Resolution::new(cw, ch), FrameFormat::MJPEG, limits.fps.load(Ordering::Relaxed))),
             &[FrameFormat::MJPEG, FrameFormat::YUYV, FrameFormat::NV12, FrameFormat::RAWRGB, FrameFormat::RAWBGR, FrameFormat::GRAY],
         );
         let mut cam = match nokhwa::Camera::new(info.index().clone(), want).and_then(|mut c| c.open_stream().map(|_| c)) {
@@ -131,7 +182,7 @@ pub fn camera(frames: Frames, key: String, stop: Arc<AtomicBool>, ended: Box<dyn
             };
             fails = 0;
             if let Some(bgra) = to_bgra(&raw, fmt.format(), w, h) {
-                send_bgra(&src, &bgra, w * 4, w, h, start);
+                send_bgra(&src, &bgra, w * 4, w, h, limits.max_h.load(Ordering::Relaxed), start);
                 preview.offer(&bgra, w * 4, w, h);
             }
         }
@@ -224,7 +275,7 @@ fn wayland() -> bool {
     std::env::var_os("WAYLAND_DISPLAY").is_some() || std::env::var("XDG_SESSION_TYPE").map(|s| s == "wayland").unwrap_or(false)
 }
 
-pub fn screen(frames: Frames, key: String, source_id: Option<u64>, stop: Arc<AtomicBool>, ended: Box<dyn FnOnce() + Send>) -> Result<NativeVideoSource, String> {
+pub fn screen(frames: Frames, key: String, source_id: Option<u64>, limits: Arc<Limits>, stop: Arc<AtomicBool>, ended: Box<dyn FnOnce() + Send>) -> Result<NativeVideoSource, String> {
     use libwebrtc::desktop_capturer::{CaptureError, DesktopCaptureSourceType, DesktopCapturer, DesktopCapturerOptions};
     let source = NativeVideoSource::new(VideoResolution { width: 1920, height: 1080 }, true);
     let src = source.clone();
@@ -250,19 +301,28 @@ pub fn screen(frames: Frames, key: String, source_id: Option<u64>, stop: Arc<Ato
         let failed = Arc::new(AtomicBool::new(false));
         let f2 = failed.clone();
         let mut preview = Preview::new(frames, key);
+        let lim = limits.clone();
         cap.start_capture(pick, move |r| match r {
             Ok(frame) => {
                 let (w, h) = (frame.width() as u32, frame.height() as u32);
-                send_bgra(&src, frame.data(), frame.stride(), w, h, start);
+                send_bgra(&src, frame.data(), frame.stride(), w, h, lim.max_h.load(Ordering::Relaxed), start);
                 preview.offer(frame.data(), frame.stride(), w, h);
             }
             Err(CaptureError::Permanent) => f2.store(true, Ordering::SeqCst),
             Err(_) => {}
         });
         let _ = ok_tx.send(Ok(()));
+        // Paced to the frame rate picked, on a steady clock so 60 FPS really is 60.
+        let mut next = Instant::now();
         while !stop.load(Ordering::SeqCst) && !failed.load(Ordering::SeqCst) {
             cap.capture_frame();
-            std::thread::sleep(Duration::from_millis(33));
+            next += limits.frame_time();
+            let now = Instant::now();
+            if next > now {
+                std::thread::sleep(next - now);
+            } else {
+                next = now;
+            }
         }
         drop(cap);
         if !stop.load(Ordering::SeqCst) {

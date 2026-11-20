@@ -12,12 +12,15 @@ mod net;
 mod prefs;
 mod settings;
 mod sfx;
+mod update;
+mod voiceui;
 mod store;
 mod titlebar;
 
 use gpui_kit::*;
 
 fn main() {
+    update::cleanup();
     let prefs = prefs::Prefs::load();
     gpui_kit::application().with_assets(gpui_kit::assets::Assets).run(move |cx| {
         gpui_kit::init(cx);
@@ -37,7 +40,12 @@ fn main() {
             window_min_size: Some(gpui_kit::size(px(800.), px(500.))),
             ..Default::default()
         };
-        gpui_kit::open_window(options, cx, |window, cx| cx.new(|cx| app::LiteCord::new(prefs.clone(), window, cx))).expect("Failed to open window");
+        gpui_kit::open_window(options, cx, |window, cx| cx.new(|cx| {
+            let mut app = app::LiteCord::new(prefs.clone(), window, cx);
+            app.start_global_ptt(cx);
+            app.start_update_checks(cx);
+            app
+        })).expect("Failed to open window");
         cx.activate(true);
     });
 }

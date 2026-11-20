@@ -42,8 +42,22 @@ desktop app and browsers.
     connection problems, a call timer, and the "Voice Connected" panel above your user bar
   - Camera, screen share (on Wayland the system asks which screen or window to share), and
     watching everyone else's cameras and streams. Click a tile to make it big
-  - Your microphone goes through WebRTC's echo cancellation, noise suppression and automatic
-    gain, like a browser. Pick the microphone and speakers in **Settings › Voice & Video**
+  - **Stream sound**: your stream sends what your computer plays, like Discord. "All apps"
+    leaves LiteCord's own sound out, so friends never hear themselves (Linux: PipeWire records
+    each app with `pw-record`; Windows 10 2004+: process loopback). On Linux you can also pick
+    one app
+- **Settings › Voice & Video**, like the web app's: input and output device and volume (0 to
+  200%), a Mic Test that plays you back with a level meter, and Input Profiles: Voice Isolation
+  (AI noise suppression with RNNoise, automatic voice activity), Studio (no processing) or
+  Custom (Voice Activity or Push to Talk with any key or a side mouse button, release delay,
+  automatic or manual sensitivity, AI / standard / no noise suppression, echo cancellation,
+  automatic gain). Push to talk works while you're in a game on Windows; on Linux only while
+  LiteCord's window is in front. Also camera choice and quality, and screen share resolution
+  (up to Source), frame rate (up to 60) and bitrate, which change right away even while live
+- **Updates**: when a new release is out, a green button shows at the top right. Point at it
+  and it says **Update**; click it and LiteCord downloads the new version, checks it against
+  the release's `SHA256SUMS.txt`, swaps itself and restarts. It's never forced. Turn the check
+  off, or check now, in **Settings › Advanced**
 - **Servers**: the **+** in the server rail joins a server by name (the same names as the web app,
   e.g. `lobby`), or creates it. Text channels with chat history, and voice channels: click one to
   join, and see who's in each. Your copy of each server is saved, so it survives everyone
@@ -57,7 +71,7 @@ desktop app and browsers.
   mute them just for you. It's remembered for that person
 
 Not yet: sending files (received files show their name), forums (they open in the browser),
-stage moderation, and choosing a camera.
+and stage moderation.
 
 ## Run it
 
@@ -111,7 +125,10 @@ instead of a camera, and `LC_DEBUG=1` / `LC_WEBRTC_LOG=1` print signaling and li
   - `relay.rs`: the WebSocket to the relay room (`/relay?room=…`), big messages in pieces
   - `media.rs`: WebRTC connections, one per person in the call, with the web app's "perfect
     negotiation" and fresh starts when a connection fails
-  - `audio.rs`: microphone and speakers with `cpal`, and WebRTC's audio processing
+  - `audio.rs`: microphone and speakers with `cpal`: input and output volume, AI noise
+    suppression (`nnnoiseless`), WebRTC's audio processing, and the voice gate (voice activity
+    or push to talk, a port of the web app's `voice-gate.js`)
+  - `share_audio.rs`: stream sound (every app but LiteCord, or one app)
   - `video.rs`, `capture.rs`: camera (`nokhwa`), screen share (libwebrtc's desktop capturer) and
     other people's video turned into pictures for the UI
 - `src/callui.rs`: the call area, call bar, voice panel and incoming call card
@@ -121,6 +138,8 @@ instead of a camera, and `LC_DEBUG=1` / `LC_WEBRTC_LOG=1` print signaling and li
 - `src/sfx.rs`: sound effects, drawn in code like the web app's
 - `src/prefs.rs`: settings, themes, zoom, and detecting your desktop's window buttons
 - `src/settings.rs`: the User Settings screen
+- `src/voiceui.rs`: Settings › Voice & Video, and push to talk
+- `src/update.rs`: looking for new releases and the green Update button
 - `src/titlebar.rs`: the custom title bar
 
 ## How calls work
@@ -138,4 +157,4 @@ stops decoding new incoming audio once everyone who was there earlier has left.
 ## Next steps
 
 1. Files in chats and DMs, forums
-2. Stage moderation, camera picker
+2. Stage moderation

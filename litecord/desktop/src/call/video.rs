@@ -130,17 +130,17 @@ impl Drop for Capture {
     }
 }
 
-pub use super::capture::{camera, screen};
+pub use super::capture::{camera, cameras, screen, Limits};
 
 impl Capture {
-    pub fn camera(frames: &Frames, key: &str, ended: Box<dyn FnOnce() + Send>) -> Result<(NativeVideoSource, Capture), String> {
+    pub fn camera(frames: &Frames, key: &str, device: &str, limits: Arc<Limits>, ended: Box<dyn FnOnce() + Send>) -> Result<(NativeVideoSource, Capture), String> {
         let (cap, stop) = Capture::new(frames, key);
-        let track = camera(frames.clone(), key.to_string(), stop, ended)?;
+        let track = camera(frames.clone(), key.to_string(), device.to_string(), limits, stop, ended)?;
         Ok((track, cap))
     }
-    pub fn screen(frames: &Frames, key: &str, source: Option<u64>, ended: Box<dyn FnOnce() + Send>) -> Result<(NativeVideoSource, Capture), String> {
+    pub fn screen(frames: &Frames, key: &str, source: Option<u64>, limits: Arc<Limits>, ended: Box<dyn FnOnce() + Send>) -> Result<(NativeVideoSource, Capture), String> {
         let (cap, stop) = Capture::new(frames, key);
-        let track = screen(frames.clone(), key.to_string(), source, stop, ended)?;
+        let track = screen(frames.clone(), key.to_string(), source, limits, stop, ended)?;
         Ok((track, cap))
     }
 }

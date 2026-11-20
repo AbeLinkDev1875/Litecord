@@ -32,6 +32,7 @@ pub fn call_icon(name: &str) -> Icon {
         "screen" => "M3 4h18v12H3z M8 20h8 M12 16v4".into(),
         "share" => "M3 4h18v12H3z M8 20h8 M12 16v4 M9 10l3-3 3 3 M12 7v6".into(),
         "signal" => "M5 20v-3 M10 20v-7 M15 20V9 M20 20V5".into(),
+        "download" => "M12 4v11 M7 10l5 5 5-5 M5 20h14".into(),
         "phone" => "M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z".into(),
         _ => "M6 6l12 12 M18 6L6 18".into(),
     };
@@ -84,6 +85,9 @@ impl LiteCord {
             }));
             h.send(Cmd::Devices { mic: self.prefs.mic_device.clone(), speaker: self.prefs.speaker_device.clone() });
             h.send(self.user_audio_cmd());
+            h.send(Cmd::Voice(self.prefs.voice_opts()));
+            h.send(self.prefs.share_cmd());
+            h.send(self.prefs.cam_cmd());
             self.call.engine = Some(h);
             cx.spawn(async move |this, cx| {
                 while let Ok(ev) = rx.recv().await {

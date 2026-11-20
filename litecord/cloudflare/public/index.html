@@ -118,6 +118,13 @@ main{display:flex;flex-direction:column;min-height:0;min-width:0;background:var(
 #chTitle button{background:none;border:0;color:var(--muted);cursor:pointer;padding:0;font-weight:700;display:flex;gap:6px;align-items:center}
 #chTitle button:hover{color:var(--text)}
 #chTools{display:flex;align-items:center;gap:2px}
+/* A new version is out: a green button at the top right that says "Update" when you point at it (like Discord's). */
+#updBtn{display:flex;align-items:center;gap:4px;height:26px;padding:0 6px;margin-left:6px;border:0;border-radius:13px;cursor:pointer;
+  background:rgba(35,165,90,.15);color:#23a55a;font:700 12px/1 inherit;font-family:inherit;transition:background .15s,color .15s}
+#updBtn[hidden]{display:none}
+#updBtn .lbl{display:none}
+#updBtn:hover,#updBtn:focus-visible{background:#23a55a;color:#fff}
+#updBtn:hover .lbl,#updBtn:focus-visible .lbl{display:inline}
 #search{width:160px;padding:5px 8px;font-size:13px;margin-left:6px;transition:width .15s}
 #search:focus{width:240px}
 #view{flex:1;display:flex;flex-direction:column;min-height:0}
@@ -777,6 +784,7 @@ body.spoil-all .spoiler *{visibility:visible}
         <button id="chatBtn" class="ib" data-icon="chat" data-tip="Show Chat" hidden></button>
         <button id="newGroupBtn" class="ib" data-icon="chatPlus" data-tip="New Group DM" hidden></button>
         <input id="search" placeholder="Search" maxlength="100" title="Search messages in this server (press Enter)">
+        <button id="updBtn" data-icon="download" data-tip="A new version of LiteCord is out. Click to update (it reloads the page)." hidden><span class="lbl">Update</span></button>
       </div>
     </div>
     <div id="view"></div>
@@ -881,6 +889,24 @@ let micBusy = false, micFailed = false;
 const isFirefox = /Firefox\//.test(navigator.userAgent);
 const canMedia = !!navigator.mediaDevices?.getUserMedia;
 const canShare = !!navigator.mediaDevices?.getDisplayMedia;
+
+/* ---------- updates: a new version was deployed (green Update button at the top right, never forced) ---------- */
+let pageTag = null;
+async function checkForUpdate() {
+  try {
+    const tag = (await fetch("/", {method: "HEAD", cache: "no-store"})).headers.get("etag");
+    if (!tag) return;
+    if (pageTag === null) pageTag = tag;
+    else if (tag !== pageTag) $("#updBtn").hidden = false;
+  } catch {}
+}
+checkForUpdate();
+setInterval(checkForUpdate, 5 * 60e3);
+addEventListener("focus", checkForUpdate);
+$("#updBtn").onclick = () => {
+  if (voiceCh && !confirm("Updating reloads LiteCord, so you'll leave the call for a moment. Update now?")) return;
+  location.reload();
+};
 
 /* ---------- installing as an app (its own window, no browser tabs) ---------- */
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
@@ -3160,6 +3186,7 @@ const PATHS = {
   sparkle: "M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z",
   copy: "M8 8h12v12H8z M4 16V4h12",
   arrowRight: "M4 12h15 M13 6l6 6-6 6",
+  download: "M12 4v11 M7 10l5 5 5-5 M5 20h14",
   send: "M4 12l16-8-6 16-3-7z",
   logo: "M6 5h12a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3h-6l-4.5 3.5V17H6a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3z M8.5 11h.01 M12 11h.01 M15.5 11h.01",
 };

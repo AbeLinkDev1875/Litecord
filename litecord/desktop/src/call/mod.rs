@@ -16,11 +16,74 @@ pub mod capture;
 pub mod media;
 pub mod relay;
 pub mod room;
+pub mod share_audio;
 pub mod video;
 
 use std::sync::{Arc, Mutex};
 
 pub use room::{VoiceState, DM_VOICE};
+
+/// How a camera or screen share looks, like the web app's quality choices.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Quality {
+    /// Height in pixels; 0 = as captured ("Source").
+    pub height: u32,
+    pub fps: u32,
+    /// Megabits a second; 0 = picked from the size and frame rate ("Auto").
+    pub mbps: f32,
+}
+
+impl Quality {
+    /// Bits a second to aim for, like the web app's `shareLimits` and `camLimits`.
+    pub fn bitrate(&self, screen: bool) -> u64 {
+        if self.mbps > 0.0 {
+            return (self.mbps.clamp(0.1, 50.0) * 1e6) as u64;
+        }
+        let h = if self.height == 0 { 1440.0 } else { self.height as f64 };
+        let px = h * h * 16.0 / 9.0 * self.fps.max(1) as f64;
+        if screen { (px * 0.1).clamp(500e3, 10e6) as u64 } else { (px * 0.07).clamp(400e3, 6e6) as u64 }
+    }
+}
+
+/// Microphone settings, like the web app's Voice & Video page. `profile` sets most of them:
+/// "isolation" (AI noise suppression and automatic voice activity), "studio" (nothing at all,
+/// open mic) or "custom" (the fields below).
+#[derive(Debug, Clone, PartialEq)]
+pub struct VoiceOpts {
+    /// 0 to 2.
+    pub in_vol: f32,
+    pub out_vol: f32,
+    pub profile: String,
+    /// "vad" (voice activity) or "ptt" (push to talk).
+    pub mode: String,
+    pub auto_sens: bool,
+    /// Manual sensitivity in dB (-80 to 0).
+    pub sens: f32,
+    /// "ai", "standard" or "off".
+    pub ns: String,
+    pub ec: bool,
+    pub agc: bool,
+    pub ptt_delay_ms: u32,
+}
+
+impl Default for VoiceOpts {
+    fn default() -> Self {
+        VoiceOpts { in_vol: 1.0, out_vol: 1.0, profile: "isolation".into(), mode: "vad".into(), auto_sens: true, sens: -50.0, ns: "ai".into(), ec: true, agc: true, ptt_delay_ms: 20 }
+    }
+}
+
+impl VoiceOpts {
+    /// What actually applies once the profile is taken into account (the web app's nsEff, ecEff,
+    /// agcEff and inputModeEff): (noise suppression, echo cancellation, gain control, mode,
+    /// automatic sensitivity, manual threshold in dB).
+    pub fn effective(&self) -> (&str, bool, bool, &str, bool, f32) {
+        match self.profile.as_str() {
+            "studio" => ("off", false, false, "vad", false, -100.0),
+            "custom" => (self.ns.as_str(), self.ec, self.agc, self.mode.as_str(), self.auto_sens, self.sens),
+            _ => ("ai", true, true, "vad", true, self.sens),
+        }
+    }
+}
 
 /// What the UI asks the engine to do.
 #[derive(Debug, Clone)]
@@ -48,6 +111,15 @@ pub enum Cmd {
     Rename(String),
     /// Pick the microphone / speakers by name (empty = system default).
     Devices { mic: String, speaker: String },
+    /// Microphone and speaker settings.
+    Voice(VoiceOpts),
+    /// Push-to-talk key held (true) or let go.
+    Ptt(bool),
+    /// Screen share quality and what it sends as sound (`share_audio::NONE`, `ALL` or
+    /// "app:<name>"). Quality changes apply right away while live; sound on the next share.
+    Share { quality: Quality, sound: String },
+    /// Which camera (by name, empty = the first) and its quality. Restarts the camera if it's on.
+    Cam { device: String, quality: Quality },
     Quit,
 }
 

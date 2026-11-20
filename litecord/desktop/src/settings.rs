@@ -66,11 +66,11 @@ fn sections() -> Vec<(&'static str, Vec<Item>)> {
             vec![
                 Item { page: Page::Appearance, label: "Appearance", icon: IconName::Palette, words: "theme dark light ash onyx zoom scale size font compact cozy" },
                 Item { page: Page::Window, label: window_label(), icon: IconName::Frame, words: "title bar border frame decorations minimize maximize close buttons native" },
-                Item { page: Page::Voice, label: "Voice & Video", icon: IconName::Mic, words: "microphone mic speakers headphones output input audio device call camera" },
+                Item { page: Page::Voice, label: "Voice & Video", icon: IconName::Mic, words: "microphone mic speakers headphones output input audio device call camera volume test push to talk ptt voice activity sensitivity noise suppression echo gain isolation studio stream screen share quality resolution fps bitrate sound" },
                 Item { page: Page::Notifications, label: "Notifications", icon: IconName::Bell, words: "desktop alerts preview sounds sound effects ringtone volume" },
                 Item { page: Page::Keybinds, label: "Keybinds", icon: IconName::SquareTerminal, words: "shortcuts keys keyboard" },
                 Item { page: Page::Language, label: "Language & Time", icon: IconName::Globe, words: "clock 12 24 hour time" },
-                Item { page: Page::Advanced, label: "Advanced", icon: IconName::Settings, words: "server data folder version" },
+                Item { page: Page::Advanced, label: "Advanced", icon: IconName::Settings, words: "server data folder version update updates download new" },
             ],
         ),
     ]
@@ -87,12 +87,12 @@ fn suggested_zoom(screen_h: f32) -> u32 {
     }
 }
 
-fn h2(t: impl Into<SharedString>) -> Div {
+pub(crate) fn h2(t: impl Into<SharedString>) -> Div {
     div().text_xl().font_weight(FontWeight::BOLD).text_color(c_strong()).mb(u(20.)).child(t.into())
 }
 
 /// A titled block, with a line under it like Discord's sections.
-fn section(title: &'static str) -> Div {
+pub(crate) fn section(title: &'static str) -> Div {
     div()
         .pb(u(20.))
         .mb(u(20.))
@@ -104,11 +104,11 @@ fn section(title: &'static str) -> Div {
         .when(!title.is_empty(), |d| d.child(div().text_size(u(17.)).font_weight(FontWeight::BOLD).text_color(c_muted()).child(title)))
 }
 
-fn note(t: impl Into<SharedString>) -> Div {
+pub(crate) fn note(t: impl Into<SharedString>) -> Div {
     div().text_sm().text_color(c_muted()).child(t.into())
 }
 
-fn chip(id: impl Into<ElementId>, label: impl Into<SharedString>, on: bool) -> Stateful<Div> {
+pub(crate) fn chip(id: impl Into<ElementId>, label: impl Into<SharedString>, on: bool) -> Stateful<Div> {
     div()
         .id(id)
         .px(u(10.))
@@ -127,7 +127,7 @@ fn chip(id: impl Into<ElementId>, label: impl Into<SharedString>, on: bool) -> S
 }
 
 /// A radio row (the circle, a title and a description), like Discord's.
-fn radio(id: impl Into<ElementId>, on: bool, title: impl Into<SharedString>, desc: impl Into<SharedString>) -> Stateful<Div> {
+pub(crate) fn radio(id: impl Into<ElementId>, on: bool, title: impl Into<SharedString>, desc: impl Into<SharedString>) -> Stateful<Div> {
     let desc: SharedString = desc.into();
     div()
         .id(id)
@@ -163,7 +163,7 @@ fn radio(id: impl Into<ElementId>, on: bool, title: impl Into<SharedString>, des
 }
 
 /// A switch row: title and description on the left, the switch on the right.
-fn toggle_row(title: &'static str, desc: &'static str, switch: Switch) -> Div {
+pub(crate) fn toggle_row(title: &'static str, desc: &'static str, switch: Switch) -> Div {
     div()
         .flex()
         .items_center()
@@ -274,7 +274,7 @@ impl LiteCord {
             Page::Voice => self.page_voice(cx),
             Page::Keybinds => self.page_keybinds(),
             Page::Language => self.page_language(cx),
-            Page::Advanced => self.page_advanced(),
+            Page::Advanced => self.page_advanced(cx),
         };
         let content = div()
             .flex_1()
@@ -728,58 +728,6 @@ impl LiteCord {
         sec
     }
 
-    fn page_voice(&mut self, cx: &mut Context<Self>) -> Div {
-        if self.audio_devices.is_none() {
-            self.audio_devices = Some(crate::call::audio::Audio::devices());
-        }
-        let (ins, outs) = self.audio_devices.clone().unwrap_or_default();
-        // ALSA lists many plugin devices; keep the ones people pick.
-        let useful = |n: &String| {
-            !cfg!(target_os = "linux")
-                || ["pipewire", "pulse"].contains(&n.as_str())
-                || n.starts_with("sysdefault:") || n.starts_with("front:") || n.starts_with("hdmi:")
-        };
-        let list = |id: &'static str, names: Vec<String>, cur: String, mic: bool, cx: &mut Context<Self>| {
-            let mut col = div().flex().flex_col().gap(u(2.));
-            let mut all = vec![String::new()];
-            all.extend(names.into_iter().filter(|n| useful(n)));
-            for (i, n) in all.into_iter().enumerate() {
-                let on = n == cur;
-                let label = if n.is_empty() { "Default".to_string() } else { n.clone() };
-                col = col.child(
-                    div().id(SharedString::from(format!("{id}-{i}"))).h(u(36.)).px(u(10.)).rounded(u(6.)).flex().items_center().gap(u(10.)).cursor_pointer()
-                        .bg(if on { c_active() } else { transparent_black() }).hover(|d| d.bg(c_hover()))
-                        .child(div().size(u(16.)).rounded_full().border_2().border_color(if on { c_accent() } else { c_muted() }).flex().items_center().justify_center()
-                            .when(on, |d| d.child(div().size(u(8.)).rounded_full().bg(c_accent()))))
-                        .child(div().truncate().text_color(c_text()).child(label))
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            if mic { this.prefs.mic_device = n.clone(); } else { this.prefs.speaker_device = n.clone(); }
-                            this.save_prefs();
-                            if let Some(e) = &this.call.engine {
-                                e.send(crate::call::Cmd::Devices { mic: this.prefs.mic_device.clone(), speaker: this.prefs.speaker_device.clone() });
-                            }
-                            cx.notify();
-                        })),
-                );
-            }
-            col
-        };
-        let (mic, spk) = (self.prefs.mic_device.clone(), self.prefs.speaker_device.clone());
-        div()
-            .child(h2("Voice & Video"))
-            .child(note("Calls clean up your microphone with the same echo cancellation, noise suppression and automatic volume that browsers use."))
-            .child(section("INPUT DEVICE").child(list("mic", ins, mic, true, cx)))
-            .child(section("OUTPUT DEVICE").child(list("spk", outs, spk, false, cx)))
-            .child(
-                section("").child(
-                    Button::new("rescan").label("Look for Devices Again").on_click(cx.listener(|this, _, _, cx| {
-                        this.audio_devices = None;
-                        cx.notify();
-                    })),
-                ),
-            )
-    }
-
     fn page_keybinds(&self) -> Div {
         let row = |keys: &'static str, what: &'static str| {
             div()
@@ -828,7 +776,7 @@ impl LiteCord {
             )
     }
 
-    fn page_advanced(&mut self) -> Div {
+    fn page_advanced(&mut self, cx: &mut Context<Self>) -> Div {
         let dir = crate::store::data_dir();
         let dir_s = dir.display().to_string();
         div()
@@ -843,6 +791,22 @@ impl LiteCord {
                     .child(note("Your account, chats and settings are saved here, on this computer only."))
                     .child(div().px(u(12.)).py(u(8.)).rounded(u(6.)).bg(c_input()).font_family("monospace").text_sm().text_color(c_strong()).child(dir_s))
                     .child(Button::new("opendata").label("Open Folder").on_click(move |_, _, cx| cx.reveal_path(&dir))),
+            )
+            .child(
+                section("UPDATES")
+                    .child(toggle_row(
+                        "Check for Updates",
+                        "When a new version is out, a green button shows at the top right. Click it to update; nothing changes until you do.",
+                        Switch::new("updcheck").checked(self.prefs.update_check).on_click(cx.listener(|this, on: &bool, _, cx| {
+                            this.prefs.update_check = *on;
+                            this.save_prefs();
+                            cx.notify();
+                        })),
+                    ))
+                    .child(div().flex().gap(u(8.))
+                        .child(Button::new("checknow").label("Check Now").on_click(cx.listener(|this, _, _, cx| this.check_updates_now(cx))))
+                        .child(Button::new("releases").label("All Versions on GitHub").on_click(|_, _, cx| cx.open_url(crate::update::RELEASES))))
+                    .children(self.update.checked.clone().map(note)),
             )
             .child(
                 section("ABOUT").child(note(format!(
