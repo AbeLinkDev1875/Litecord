@@ -56,7 +56,7 @@ desktop app and browsers.
   (up to Source), frame rate (up to 60) and bitrate, which change right away even while live
 - **Updates**: when a new release is out, a green button shows at the top right. Point at it
   and it says **Update**; click it and LiteCord downloads the new version, checks it against
-  the release's `SHA256SUMS.txt`, swaps itself and restarts. It's never forced. Turn the check
+  the release's `SHA256SUMS.txt`, swaps itself and restarts. LiteCord looks when it starts, every 30 minutes, and when you come back to its window. It's never forced. Turn the check
   off, or check now, in **Settings › Advanced**
 - **Servers**: the **+** in the server rail joins a server by name (the same names as the web app,
   e.g. `lobby`), or creates it. Text channels with chat history, and voice channels: click one to

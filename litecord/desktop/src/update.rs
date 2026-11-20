@@ -37,6 +37,9 @@ pub enum State {
 pub struct UpdateUi {
     pub state: State,
     hover: bool,
+    /// When we last asked GitHub, and whether the window was just brought back to the front.
+    last_check: Option<std::time::Instant>,
+    pub(crate) refocused: bool,
     /// What the last manual check found, for Settings.
     pub checked: Option<String>,
 }
@@ -52,6 +55,11 @@ pub fn newer(remote: &str, local: &str) -> bool {
         }
     }
     false
+}
+
+/// Our version. `LITECORD_PRETEND_VERSION` pretends to be another one, to test updating.
+fn current_version() -> String {
+    std::env::var("LITECORD_PRETEND_VERSION").unwrap_or_else(|_| env!("CARGO_PKG_VERSION").to_string())
 }
 
 fn asset_name(version: &str) -> Option<String> {
@@ -81,7 +89,7 @@ pub fn check() -> Result<Option<Release>, String> {
         .map_err(|e| e.to_string())?;
     let tag = v["tag_name"].as_str().unwrap_or("");
     let version = tag.trim_start_matches('v').to_string();
-    if version.is_empty() || !newer(&version, env!("CARGO_PKG_VERSION")) {
+    if version.is_empty() || !newer(&version, &current_version()) {
         return Ok(None);
     }
     let Some(asset) = asset_name(&version) else { return Ok(None) };
@@ -194,32 +202,54 @@ pub fn cleanup() {
 
 impl LiteCord {
     /// Looks for updates soon after starting and every few hours, if that's turned on.
+    /// Looks for updates soon after starting, every 30 minutes, and when you come back to the
+    /// window (at most every 5 minutes), if that's turned on.
     pub(crate) fn start_update_checks(&mut self, cx: &mut Context<Self>) {
-        if cfg!(debug_assertions) {
+        if cfg!(debug_assertions) && std::env::var_os("LITECORD_PRETEND_VERSION").is_none() {
             return; // a build from source isn't a release
         }
+        use std::time::{Duration, Instant};
         cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(std::time::Duration::from_secs(5)).await;
+            cx.background_executor().timer(Duration::from_secs(3)).await;
             loop {
-                let on = this.update(cx, |this, _| this.prefs.update_check).unwrap_or(false);
-                if on {
-                    let found = cx.background_executor().spawn(async { check() }).await;
-                    let alive = this.update(cx, |this, cx| {
-                        if let Ok(Some(r)) = found {
-                            if matches!(this.update.state, State::None) {
-                                this.update.state = State::Available(r);
-                                cx.notify();
-                            }
-                        }
-                    });
-                    if alive.is_err() {
-                        break;
+                let due = this.update(cx, |this, _| {
+                    let u = &mut this.update;
+                    let since = u.last_check.map(|t| t.elapsed()).unwrap_or(Duration::MAX);
+                    let due = this.prefs.update_check
+                        && !matches!(u.state, State::Working(_))
+                        && (since >= Duration::from_secs(30 * 60) || (u.refocused && since >= Duration::from_secs(5 * 60)));
+                    u.refocused = false;
+                    if due {
+                        u.last_check = Some(Instant::now());
                     }
+                    due
+                });
+                match due {
+                    Err(_) => break,
+                    Ok(true) => {
+                        let found = cx.background_executor().spawn(async { check() }).await;
+                        let _ = this.update(cx, |this, cx| this.found_update(found, cx));
+                    }
+                    Ok(false) => {}
                 }
-                cx.background_executor().timer(std::time::Duration::from_secs(3 * 3600)).await;
+                cx.background_executor().timer(Duration::from_secs(15)).await;
             }
         })
         .detach();
+    }
+
+    /// Shows the button for a newer release (or a newer one than the button showed).
+    fn found_update(&mut self, found: Result<Option<Release>, String>, cx: &mut Context<Self>) {
+        let Ok(Some(r)) = found else { return };
+        let show = match &self.update.state {
+            State::None => true,
+            State::Available(old) | State::Failed(old, _) => newer(&r.version, &old.version),
+            State::Working(_) => false,
+        };
+        if show {
+            self.update.state = State::Available(r);
+            cx.notify();
+        }
     }
 
     /// "Check for Updates" in Settings.
@@ -306,8 +336,8 @@ impl LiteCord {
                 .items_center()
                 .gap(u(4.))
                 .cursor_pointer()
-                .bg(green.opacity(if open { 1.0 } else { 0.15 }))
-                .text_color(if open { white() } else { green.into() })
+                .bg(green.opacity(if open { 1.0 } else { 0.28 }))
+                .text_color(if open { white() } else { rgb(0x2dc770).into() })
                 .text_size(u(12.))
                 .font_weight(FontWeight::BOLD)
                 .child(crate::callui::call_icon("download").size(u(16.)))

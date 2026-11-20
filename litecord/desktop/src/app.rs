@@ -269,6 +269,9 @@ impl LiteCord {
         subs.push(cx.observe_window_activation(window, |this, window, cx| {
             this.active = window.is_window_active();
             if this.active {
+                this.update.refocused = true;
+            }
+            if this.active {
                 if let (View::Dm(k), Some(s)) = (this.view.clone(), this.store.as_mut()) {
                     s.unread.remove(&k);
                 }
