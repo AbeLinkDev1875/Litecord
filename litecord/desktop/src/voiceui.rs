@@ -437,6 +437,7 @@ impl LiteCord {
             .child(label("Bitrate".into()))
             .child(seg("shbr", mbps(&[0., 2., 4., 6., 8., 12., 20.]), p.share_mbps, |p, v| p.share_mbps = v, cx))
             .child(note("Quality changes apply right away, even while you're live. More bitrate looks cleaner but your upload has to keep up."))
+            .child(note("The desktop app encodes your stream on the CPU for now. 1080p at 30 FPS works well on most computers; 1440p, Source or 60 FPS need a fast CPU, and if it can't keep up friends get fewer frames per second (the picture stays sharp)."))
             .child(label("Stream Sound".into()))
             .child(sound_list)
             .child(note(if cfg!(target_os = "linux") {

@@ -115,6 +115,9 @@ pub struct Shared {
     meter_open: AtomicBool,
     /// Mic Test: play the microphone back to us.
     test: AtomicBool,
+    /// The microphone or speakers reported an error: the audio thread closes them and opens
+    /// them again after a pause.
+    broken: Arc<AtomicBool>,
     remotes: Mutex<HashMap<String, Remote>>,
     mic_level: AtomicU32,
     /// Send silence instead of the microphone (muted or deafened).
@@ -152,6 +155,7 @@ impl Audio {
             meter_thr: AtomicU32::new(f32_bits(-50.0)),
             meter_open: AtomicBool::new(false),
             test: AtomicBool::new(false),
+            broken: Arc::new(AtomicBool::new(false)),
             remotes: Mutex::new(HashMap::new()),
             mic_level: AtomicU32::new(0),
             mic_off: AtomicBool::new(false),
@@ -292,32 +296,82 @@ pub(crate) fn find_device(input: bool, name: &str) -> Option<cpal::Device> {
     if input { host.default_input_device() } else { host.default_output_device() }
 }
 
+/// The error handler for a cpal stream. cpal's ALSA backend retries straight away after an
+/// error (a POLLERR from PipeWire, for one), so a stream that broke calls this in a tight loop,
+/// thousands of times a second. Printing each one flooded the system log until the whole
+/// computer froze. So: say it once, and flag the stream so its owner closes it.
+pub(crate) fn on_stream_error(what: &'static str, broken: Arc<AtomicBool>) -> impl FnMut(cpal::StreamError) + Send + 'static {
+    move |e| {
+        if !broken.swap(true, Ordering::SeqCst) {
+            eprintln!("{what}: {e} (closing it, it will be opened again)");
+        }
+    }
+}
+
 fn audio_thread(rx: mpsc::Receiver<Ctl>, shared: Arc<Shared>, errors: Arc<Mutex<Vec<String>>>) {
+    use std::time::{Duration, Instant};
     let mut streams: Vec<cpal::Stream> = Vec::new();
     let err = |e: String| {
         if let Ok(mut v) = errors.lock() {
             v.push(e);
         }
     };
-    while let Ok(c) = rx.recv() {
-        match c {
-            Ctl::Stop => streams.clear(),
-            Ctl::Start { mic, speaker, source, rt, input } => {
+    // What's open now, to open again after an error, and when.
+    let mut last: Option<Ctl> = None;
+    let mut reopen_at: Option<Instant> = None;
+    let mut opened_at = Instant::now();
+    let mut backoff = Duration::from_secs(1);
+    let open = |c: &Ctl, streams: &mut Vec<cpal::Stream>| {
+        let Ctl::Start { mic, speaker, source, rt, input } = c else { return };
+        streams.clear();
+        shared.broken.store(false, Ordering::SeqCst);
+        match open_output(speaker, shared.clone()) {
+            Ok(s) => streams.push(s),
+            Err(e) => err(format!("Couldn't open your speakers: {e}")),
+        }
+        if *input {
+            let send = source.clone().zip(rt.clone());
+            match open_input(mic, shared.clone(), send) {
+                Ok(s) => streams.push(s),
+                Err(e) => err(format!("Couldn't use your microphone: {e}. You can still listen.")),
+            }
+        }
+        for s in streams.iter() {
+            let _ = s.play();
+        }
+    };
+    loop {
+        match rx.recv_timeout(Duration::from_millis(100)) {
+            Ok(Ctl::Stop) => {
                 streams.clear();
-                match open_output(&speaker, shared.clone()) {
-                    Ok(s) => streams.push(s),
-                    Err(e) => err(format!("Couldn't open your speakers: {e}")),
-                }
-                if input {
-                    let send = source.zip(rt);
-                    match open_input(&mic, shared.clone(), send) {
-                        Ok(s) => streams.push(s),
-                        Err(e) => err(format!("Couldn't use your microphone: {e}. You can still listen.")),
-                    }
-                }
-                for s in &streams {
-                    let _ = s.play();
-                }
+                last = None;
+                reopen_at = None;
+            }
+            Ok(c) => {
+                open(&c, &mut streams);
+                opened_at = Instant::now();
+                backoff = Duration::from_secs(1);
+                reopen_at = None;
+                last = Some(c);
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        }
+        if shared.broken.load(Ordering::SeqCst) && !streams.is_empty() {
+            // Closing the streams stops cpal's loop. Open them again after a pause that grows
+            // if they keep breaking (1 s, 2 s, 4 s… up to 30 s).
+            streams.clear();
+            if opened_at.elapsed() > Duration::from_secs(60) {
+                backoff = Duration::from_secs(1);
+            }
+            reopen_at = Some(Instant::now() + backoff);
+            backoff = (backoff * 2).min(Duration::from_secs(30));
+        }
+        if let (Some(t), Some(c)) = (reopen_at, last.as_ref()) {
+            if Instant::now() >= t {
+                reopen_at = None;
+                open(c, &mut streams);
+                opened_at = Instant::now();
             }
         }
     }
@@ -356,6 +410,7 @@ impl Resampler {
 }
 
 fn open_input(name: &str, shared: Arc<Shared>, send: Option<(NativeAudioSource, tokio::runtime::Handle)>) -> Result<cpal::Stream, String> {
+    let broken = shared.broken.clone();
     let dev = find_device(true, name).ok_or("no microphone found")?;
     let cfg = dev.default_input_config().map_err(|e| e.to_string())?;
     let channels = cfg.channels() as usize;
@@ -424,7 +479,7 @@ fn open_input(name: &str, shared: Arc<Shared>, send: Option<(NativeAudioSource, 
         }
     };
     let config: cpal::StreamConfig = cfg.config();
-    let on_err = |e: cpal::StreamError| eprintln!("microphone: {e}");
+    let on_err = on_stream_error("microphone", broken);
     macro_rules! build {
         ($t:ty) => {
             dev.build_input_stream::<$t, _, _>(&config, move |d: &[$t], _| {
@@ -445,6 +500,7 @@ fn open_input(name: &str, shared: Arc<Shared>, send: Option<(NativeAudioSource, 
 }
 
 fn open_output(name: &str, shared: Arc<Shared>) -> Result<cpal::Stream, String> {
+    let broken = shared.broken.clone();
     let dev = find_device(false, name).ok_or("no speakers found")?;
     let cfg = dev.default_output_config().map_err(|e| e.to_string())?;
     let channels = cfg.channels() as usize;
@@ -501,7 +557,7 @@ fn open_output(name: &str, shared: Arc<Shared>) -> Result<cpal::Stream, String> 
         }
     };
     let config: cpal::StreamConfig = cfg.config();
-    let on_err = |e: cpal::StreamError| eprintln!("speakers: {e}");
+    let on_err = on_stream_error("speakers", broken);
     macro_rules! build {
         ($t:ty) => {{
             let mut tmp: Vec<f32> = Vec::new();
@@ -535,6 +591,37 @@ pub fn mic_source() -> NativeAudioSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_broken_stream_is_flagged_once() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let broken = std::sync::Arc::new(AtomicBool::new(false));
+        let mut f = super::on_stream_error("speakers", broken.clone());
+        // cpal calls this in a tight loop when PipeWire returns POLLERR.
+        for _ in 0..100_000 {
+            f(cpal::StreamError::DeviceNotAvailable);
+        }
+        assert!(broken.load(Ordering::SeqCst));
+    }
+
+    /// Opens the real speakers (silently), breaks them, and checks they're closed and opened
+    /// again. `cargo test reopens_after -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn reopens_after_an_error() {
+        use std::sync::atomic::Ordering;
+        let a = super::Audio::new();
+        a.start("", "", None);
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        assert!(!a.shared.broken.load(Ordering::SeqCst), "the speakers broke by themselves");
+        a.shared.broken.store(true, Ordering::SeqCst);
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        assert!(a.shared.broken.load(Ordering::SeqCst), "it shouldn't reopen before the pause");
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        assert!(!a.shared.broken.load(Ordering::SeqCst), "the speakers weren't opened again");
+        println!("closed after the error and opened again after 1 s");
+        a.stop();
+    }
 
     #[test]
     fn resampler_keeps_length() {

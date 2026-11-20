@@ -5,7 +5,8 @@
 //! Each sound is drawn into a buffer at the speakers' own sample rate and played on its own
 //! short-lived output stream, on one background thread, so the UI never waits on audio.
 
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc};
 use std::sync::OnceLock;
 use std::time::Duration;
 
@@ -60,15 +61,16 @@ pub fn play(name: &str, speaker: &str, volume: f32) {
 }
 
 fn player(rx: mpsc::Receiver<Play>) {
-    // Streams still playing, with when they can be closed.
-    let mut playing: Vec<(cpal::Stream, std::time::Instant)> = Vec::new();
+    // Streams still playing, with when they can be closed and whether they broke.
+    let mut playing: Vec<(cpal::Stream, std::time::Instant, Arc<AtomicBool>)> = Vec::new();
     loop {
-        let next = rx.recv_timeout(Duration::from_millis(250));
+        let next = rx.recv_timeout(Duration::from_millis(50));
         let now = std::time::Instant::now();
-        playing.retain(|(_, until)| *until > now);
+        // A broken stream is closed right away (see `audio::on_stream_error`).
+        playing.retain(|(_, until, broken)| *until > now && !broken.load(Ordering::SeqCst));
         match next {
             Ok(p) => match open(&p) {
-                Ok((s, len)) => playing.push((s, now + len + Duration::from_millis(300))),
+                Ok((s, len, broken)) => playing.push((s, now + len + Duration::from_millis(300), broken)),
                 Err(e) => eprintln!("sound effect {}: {e}", p.name),
             },
             Err(mpsc::RecvTimeoutError::Timeout) => {}
@@ -77,7 +79,7 @@ fn player(rx: mpsc::Receiver<Play>) {
     }
 }
 
-fn open(p: &Play) -> Result<(cpal::Stream, Duration), String> {
+fn open(p: &Play) -> Result<(cpal::Stream, Duration, Arc<AtomicBool>), String> {
     let dev = crate::call::audio::find_device(false, &p.speaker).ok_or("no speakers found")?;
     let cfg = dev.default_output_config().map_err(|e| e.to_string())?;
     let channels = cfg.channels() as usize;
@@ -99,7 +101,8 @@ fn open(p: &Play) -> Result<(cpal::Stream, Duration), String> {
         }
     };
     let config: cpal::StreamConfig = cfg.config();
-    let on_err = |e: cpal::StreamError| eprintln!("sound effects: {e}");
+    let broken = Arc::new(AtomicBool::new(false));
+    let on_err = crate::call::audio::on_stream_error("sound effects", broken.clone());
     macro_rules! build {
         ($t:ty) => {{
             let mut tmp: Vec<f32> = Vec::new();
@@ -122,7 +125,7 @@ fn open(p: &Play) -> Result<(cpal::Stream, Duration), String> {
     }
     .map_err(|e| e.to_string())?;
     s.play().map_err(|e| e.to_string())?;
-    Ok((s, len))
+    Ok((s, len, broken))
 }
 
 #[derive(Clone, Copy)]

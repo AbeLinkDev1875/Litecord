@@ -1311,9 +1311,31 @@ fn set_stream(p: &mut Peer, key: &'static str, want: Option<(u64, String, Vec<Sr
             send_encodings: if video { enc.clone().into_iter().collect() } else { vec![] },
         };
         match p.pc.add_transceiver(t, init) {
-            Ok(tr) => senders.push(tr.sender()),
+            Ok(tr) => {
+                let sender = tr.sender();
+                // A screen share keeps every pixel when the computer or connection can't keep
+                // up and drops frames instead, so text and games stay sharp (libwebrtc's default
+                // shrinks the picture, which is what made streams look blurry).
+                if video && key == "screen" {
+                    let mut prm = sender.parameters();
+                    prm.set_degradation_preference(libwebrtc::rtp_parameters::DegradationPreference::MaintainResolution);
+                    let _ = sender.set_parameters(prm);
+                }
+                senders.push(sender);
+            }
             Err(e) => eprintln!("add track failed: {e:?}"),
         }
     }
     p.out.insert(key, (g, senders));
+}
+
+#[cfg(test)]
+mod encoders {
+    /// Which video encoders this computer offers. `cargo test encoders -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn list() {
+        let v: Vec<_> = libwebrtc::rtp_sender::VideoEncoderBackend::list_available().into_iter().collect();
+        println!("video encoders: {v:?}");
+    }
 }
