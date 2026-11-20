@@ -302,6 +302,10 @@ pub(crate) fn find_device(input: bool, name: &str) -> Option<cpal::Device> {
 /// computer froze. So: say it once, and flag the stream so its owner closes it.
 pub(crate) fn on_stream_error(what: &'static str, broken: Arc<AtomicBool>) -> impl FnMut(cpal::StreamError) + Send + 'static {
     move |e| {
+        // An underrun is a hiccup cpal already recovers from by itself.
+        if matches!(e, cpal::StreamError::BufferUnderrun) {
+            return;
+        }
         if !broken.swap(true, Ordering::SeqCst) {
             eprintln!("{what}: {e} (closing it, it will be opened again)");
         }
@@ -320,7 +324,8 @@ fn audio_thread(rx: mpsc::Receiver<Ctl>, shared: Arc<Shared>, errors: Arc<Mutex<
     let mut last: Option<Ctl> = None;
     let mut reopen_at: Option<Instant> = None;
     let mut opened_at = Instant::now();
-    let mut backoff = Duration::from_secs(1);
+    const FIRST_PAUSE: Duration = Duration::from_millis(100);
+    let mut backoff = FIRST_PAUSE;
     let open = |c: &Ctl, streams: &mut Vec<cpal::Stream>| {
         let Ctl::Start { mic, speaker, source, rt, input } = c else { return };
         streams.clear();
@@ -350,7 +355,7 @@ fn audio_thread(rx: mpsc::Receiver<Ctl>, shared: Arc<Shared>, errors: Arc<Mutex<
             Ok(c) => {
                 open(&c, &mut streams);
                 opened_at = Instant::now();
-                backoff = Duration::from_secs(1);
+                backoff = FIRST_PAUSE;
                 reopen_at = None;
                 last = Some(c);
             }
@@ -358,11 +363,11 @@ fn audio_thread(rx: mpsc::Receiver<Ctl>, shared: Arc<Shared>, errors: Arc<Mutex<
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
         }
         if shared.broken.load(Ordering::SeqCst) && !streams.is_empty() {
-            // Closing the streams stops cpal's loop. Open them again after a pause that grows
-            // if they keep breaking (1 s, 2 s, 4 s… up to 30 s).
+            // Closing the streams stops cpal's loop. Open them again after a short pause (so a
+            // one-off error is a blip), growing if they keep breaking (0.1 s, 0.2 s… up to 30 s).
             streams.clear();
             if opened_at.elapsed() > Duration::from_secs(60) {
-                backoff = Duration::from_secs(1);
+                backoff = FIRST_PAUSE;
             }
             reopen_at = Some(Instant::now() + backoff);
             backoff = (backoff * 2).min(Duration::from_secs(30));
@@ -598,6 +603,8 @@ mod tests {
         let broken = std::sync::Arc::new(AtomicBool::new(false));
         let mut f = super::on_stream_error("speakers", broken.clone());
         // cpal calls this in a tight loop when PipeWire returns POLLERR.
+        f(cpal::StreamError::BufferUnderrun);
+        assert!(!broken.load(Ordering::SeqCst), "an underrun isn't an error");
         for _ in 0..100_000 {
             f(cpal::StreamError::DeviceNotAvailable);
         }
@@ -615,11 +622,9 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(500));
         assert!(!a.shared.broken.load(Ordering::SeqCst), "the speakers broke by themselves");
         a.shared.broken.store(true, Ordering::SeqCst);
-        std::thread::sleep(std::time::Duration::from_millis(300));
-        assert!(a.shared.broken.load(Ordering::SeqCst), "it shouldn't reopen before the pause");
-        std::thread::sleep(std::time::Duration::from_millis(1200));
+        std::thread::sleep(std::time::Duration::from_millis(500));
         assert!(!a.shared.broken.load(Ordering::SeqCst), "the speakers weren't opened again");
-        println!("closed after the error and opened again after 1 s");
+        println!("closed after the error and opened again within 0.5 s");
         a.stop();
     }
 

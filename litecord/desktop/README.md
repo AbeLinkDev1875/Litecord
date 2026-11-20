@@ -153,7 +153,8 @@ GLib development files (`alsa-lib`, `glib2`; on Ubuntu `libasound2-dev libglib2.
 
 If the microphone or speakers report an error (PipeWire can return POLLERR, for example when
 the audio graph changes as a screen share starts), LiteCord closes them, prints one line, and
-opens them again after a pause that grows if it keeps happening. cpal's ALSA backend would
+opens them again after 0.1 seconds, with a pause that grows if it keeps happening (buffer
+underruns, which cpal recovers from by itself, don't count). cpal's ALSA backend would
 otherwise retry in a tight loop, and printing every error flooded the system log until the
 whole computer froze (2.3.0 had this bug). Screen shares keep their resolution when the CPU or
 connection can't keep up and drop frames instead.
