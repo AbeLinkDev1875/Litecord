@@ -73,8 +73,11 @@ an image. Pictures, videos and audio play right in the chat. Other files are dow
   **Sharp text** (code, documents). You can change these while sharing.
   Lower = less CPU and internet for you and your friends.
 - **Stream bitrate and codec**: in the same box, pick a **bitrate** (Auto, a
-  preset, or type your own in Mbps) and a **video codec** (H.264 is lightest;
-  VP9 and AV1 look sharper but use more CPU). Bitrate can be changed while live.
+  preset, or type your own in Mbps) and a **video codec**. **Auto** uses H.264,
+  the lightest on your CPU. VP8, VP9 and AV1 use more CPU; VP9 and AV1 look
+  sharper. Bitrate can be changed while live. If your stream sits at a few
+  frames a second, your computer can't keep up: lower the resolution and frame
+  rate (720p at 30 FPS is the easiest).
 - **Stream sound in Firefox**: Firefox can't capture a screen's sound, so the
   share box sends a sound input along with your stream instead. It picks
   "Stereo Mix", a virtual audio cable or a Linux "Monitor of…" input for you

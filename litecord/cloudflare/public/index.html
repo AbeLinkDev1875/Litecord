@@ -2553,6 +2553,8 @@ async function updateMic() {
 }
 // If the browser never lets the voice processing start (it would send silence), switch to the plain microphone.
 function micWatch(mic) {
+  // A slow or busy computer can take a few seconds to start it, so nudge it first and give it time.
+  setTimeout(() => { if (micProc === mic && mic.ctx.state !== "running") mic.ctx.resume().catch(() => {}); }, 2500);
   setTimeout(() => {
     if (micProc !== mic || mic.ctx.state === "running") return;
     console.warn("Voice processing didn't start; using the plain microphone.");
@@ -2560,7 +2562,7 @@ function micWatch(mic) {
     mic.ctx.close().catch(() => {});
     applyMicEnabled(); syncMedia(); renderPanel();
     toast("Voice processing couldn't start in this browser, so your plain microphone is being used.");
-  }, 2500);
+  }, 8000);
 }
 function micConstraints() {
   return {deviceId: prefs.mic ? {ideal: prefs.mic} : undefined, echoCancellation: ecEff(),
@@ -2649,8 +2651,11 @@ function shareLimits() {
   return {w: r.w, h: r.h, fps, br, hint, pref: hint === "detail" ? "maintain-resolution" : "balanced"};
 }
 function shareConstraints(q) {
-  const v = {frameRate: {max: q.fps}};
+  // Without an "ideal" frame rate browsers capture at 30 fps no matter how high the limit is, so 60 FPS needs both.
+  const v = {frameRate: {ideal: q.fps, max: q.fps}};
   if (q.w) { v.width = {max: q.w}; v.height = {max: q.h}; }
+  // "Source": Chrome quietly shrinks big screens to 2880×1800 unless a higher limit is given.
+  else if (!isFirefox) { v.width = {max: 7680}; v.height = {max: 4320}; }
   return v;
 }
 // Must be called straight from a click (browsers only show the screen picker after one).
@@ -2745,20 +2750,22 @@ function setStream(p, key, stream, videoEnc, pref) {
     if (t.kind === "video" && videoEnc) init.sendEncodings = [videoEnc];
     else if (t.kind === "audio" && key === "screen") init.sendEncodings = [{maxBitrate: 128e3}];  // stream sound is music and games, not just speech
     const tr = p.pc.addTransceiver(t, init);
-    if (t.kind === "video") preferCodec(tr, key === "screen" ? prefs.share?.codec : "h264");
+    if (t.kind === "video") preferCodec(tr, key === "screen" ? prefs.share?.vcodec : "auto");
     senders.push(tr.sender);
   }
   p.out[key] = {stream, senders};
-  if (pref) setEncoding(p.out[key], {}, pref);
+  if (pref) setEncoding(p.out[key], videoEnc || {}, pref);  // also repeats the bitrate limit, for browsers that skip it above
 }
-// H.264 can use the laptop's hardware video encoder, which is much lighter on the CPU.
-// For a screen share you can pick VP9 or AV1 instead: sharper for the same bitrate, but more work for the CPU.
+// "Auto" is H.264: it can use the computer's hardware video encoder, which is much lighter on the CPU.
+// (Tested in Firefox on a slow PC: H.264 got several times more frames through than VP8.)
+// You can also pick a codec yourself for a screen share (VP9 and AV1 are sharper for the same bitrate, but more CPU).
 function preferCodec(tr, first) {
   try {
     const caps = RTCRtpReceiver.getCapabilities?.("video");
     if (!caps || !tr.setCodecPreferences) return;
-    const want = "/" + (["vp9", "av1"].includes(first) ? first : "h264");
-    const rank = c => { const m = c.mimeType.toLowerCase(); return m.endsWith(want) ? 0 : m.endsWith("/h264") ? 1 : m.endsWith("/vp8") ? 2 : 3; };
+    const order = ["h264", "vp8"];
+    if (["vp8", "vp9", "av1"].includes(first)) order.unshift(first);
+    const rank = c => { const i = order.indexOf(c.mimeType.toLowerCase().split("/")[1]); return i < 0 ? order.length : i; };
     tr.setCodecPreferences([...caps.codecs].sort((a, b) => rank(a) - rank(b)));
   } catch (err) { console.warn(err); }
 }
@@ -3017,10 +3024,13 @@ function statsCard(id, p, rep) {
   } else out.push(row("Route", "finding a way to connect…"));
 
   // --- what you send to them ---
-  const mine = new Map();  // transceiver mid -> label
+  const mine = new Map(), tracks = new Map(), limits = new Map();  // transceiver mid -> label, track, bitrate limit
   for (const [key, o] of Object.entries(p.out)) for (const s of o.senders) {
     const mid = p.pc.getTransceivers().find(t => t.sender === s)?.mid;
-    if (mid != null) mine.set(String(mid), key === "mic" ? "Your mic" : key === "cam" ? "Your camera" : s.track?.kind === "video" ? "Your stream" : "Your stream sound");
+    if (mid == null) continue;
+    mine.set(String(mid), key === "mic" ? "Your mic" : key === "cam" ? "Your camera" : s.track?.kind === "video" ? "Your stream" : "Your stream sound");
+    tracks.set(String(mid), s.track);
+    try { limits.set(String(mid), s.getParameters().encodings?.[0]?.maxBitrate); } catch {}
   }
   const sending = Object.keys(p.out).length > 0;
   for (const o of of("outbound-rtp")) {
@@ -3029,8 +3039,13 @@ function statsCard(id, p, rep) {
     const br = rate(o, "bytesSent"), back = all.find(s => s.type === "remote-inbound-rtp" && s.localId === o.id);
     out.push(h("div", {class: "stsec"}, "▲ " + label));
     if (o.kind === "video") {
-      out.push(row("Picture", size(o)));
+      // What the screen or camera hands over, before the encoder: if this is already small or slow, the limit is the source, not the call.
+      const cap = tracks.get(String(o.mid))?.getSettings?.();
+      if (cap?.width) out.push(row("Captured", `${cap.width}×${cap.height}` + (cap.frameRate ? ` @ up to ${Math.round(cap.frameRate)} fps` : "")));
+      out.push(row("Sent", size(o), cap?.width && o.frameWidth && o.frameWidth < cap.width * .9 ? "warn" : ""));
       out.push(row("Bitrate", fmtBps(br == null ? null : br * 8) + (o.targetBitrate ? ` (aiming for ${fmtBps(o.targetBitrate)})` : "")));
+      const lim = limits.get(String(o.mid));
+      if (lim) out.push(row("Bitrate limit", fmtBps(lim)));
       out.push(row("Codec", codec(o) + (o.encoderImplementation ? " · " + o.encoderImplementation : "")));
       const why = o.qualityLimitationReason;
       if (why && why !== "none") out.push(row("Held back by", why === "cpu" ? "your CPU" : why === "bandwidth" ? "your connection" : why, "warn"));
@@ -3751,7 +3766,7 @@ function openShareDialog() {
   // Bitrate: Auto, a preset, or any number you type (in Mbps).
   const presets = ["auto", 2, 4, 6, 8, 12, 20];
   if (!pickedBitrate(s.br)) s.br = "auto";
-  if (!["vp9", "av1"].includes(s.codec)) s.codec = "h264";
+  if (!["vp8", "vp9", "av1"].includes(s.vcodec)) s.vcodec = "auto";
   const brSeg = seg("br", presets.map(v => [v, v === "auto" ? "Auto" : v + " Mbps"]));
   const brOwn = h("input", {type: "number", min: 0.1, max: 50, step: 0.1, placeholder: "Or type your own (Mbps)", value: presets.some(v => String(v) === String(s.br)) ? "" : s.br});
   brOwn.oninput = () => {
@@ -3795,8 +3810,9 @@ function openShareDialog() {
     h("div", {class: "field"}, h("label", {}, "Bitrate"), brSeg, brOwn,
       h("p", {class: "tiny"}, "More bitrate means a cleaner picture, but your upload has to keep up. Auto picks one from the resolution and frame rate.")),
     live ? null : h("div", {class: "field"}, h("label", {}, "Video Codec"),
-      seg("codec", [["h264", "H.264 (lightest)"], ["vp9", "VP9 (sharper)"], ["av1", "AV1 (sharpest)"]]),
-      h("p", {class: "tiny"}, "VP9 and AV1 look better at the same bitrate but work the CPU harder. If a friend's browser can't play your pick, H.264 is used for them.")),
+      seg("vcodec", [["auto", "Auto (H.264, lightest)"], ["vp8", "VP8"], ["vp9", "VP9 (sharper)"], ["av1", "AV1 (sharpest)"]]),
+      h("p", {class: "tiny"}, "Auto uses H.264, the lightest on your CPU. VP8, VP9 and AV1 work the CPU harder; VP9 and AV1 look better at the same bitrate. If a friend's browser can't play your pick, another one is used for them."),
+      h("p", {class: "tiny"}, "Stream stuck at a few frames a second? Your computer can't keep up. Lower the resolution and frame rate (720p at 30 FPS is the easiest), and keep Auto here.")),
     live ? null : sound,
     h("p", {class: "tiny"}, "Higher settings look better but need a faster computer and internet, for you and for your friends."),
     h("div", {class: "dlgbtns"}, h("button", {class: "btn", onclick: () => d.close()}, "Cancel"),
