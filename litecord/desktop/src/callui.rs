@@ -74,11 +74,11 @@ impl LiteCord {
         if self.call.engine.is_none() {
             let (tx, rx) = async_channel::unbounded::<CallEvent>();
             let h = call::start(SERVER.into(), tx.clone());
-            // New video pictures arrive on other threads: nudge the UI (at most ~30 times a second).
+            // New video pictures arrive on other threads: nudge the UI (at most ~60 times a second).
             let last = Arc::new(std::sync::atomic::AtomicI64::new(0));
             *h.frames.wake.lock().unwrap() = Some(Box::new(move || {
                 let now = now_ms();
-                if now - last.load(std::sync::atomic::Ordering::Relaxed) >= 33 {
+                if now - last.load(std::sync::atomic::Ordering::Relaxed) >= 15 {
                     last.store(now, std::sync::atomic::Ordering::Relaxed);
                     let _ = tx.try_send(CallEvent::Changed);
                 }
@@ -154,7 +154,11 @@ impl LiteCord {
             if self.call.images.get(&k).map(|(s, _)| *s) == Some(f.seq) {
                 continue;
             }
-            let Some(buf) = image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::from_raw(f.width, f.height, f.bgra.clone()) else { continue };
+            let px = f.take_pixels();
+            if px.is_empty() {
+                continue;
+            }
+            let Some(buf) = image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::from_raw(f.width, f.height, px) else { continue };
             let img = Arc::new(RenderImage::new(smallvec::smallvec![image::Frame::new(buf)]));
             if let Some((_, old)) = self.call.images.insert(k, (f.seq, img)) {
                 self.old_images.push(old);

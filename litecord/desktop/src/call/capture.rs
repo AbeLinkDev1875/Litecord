@@ -13,7 +13,7 @@ use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 
 use libwebrtc::native::yuv_helper;
-use libwebrtc::video_frame::{I420Buffer, VideoFrame, VideoRotation};
+use libwebrtc::video_frame::{I420Buffer, VideoBuffer, VideoFrame, VideoRotation};
 use libwebrtc::video_source::native::NativeVideoSource;
 use libwebrtc::video_source::VideoResolution;
 
@@ -51,7 +51,7 @@ pub fn fit(w: u32, h: u32, max_h: u32) -> (u32, u32) {
 }
 
 /// Sends one BGRA picture to WebRTC (and, every few frames, to our preview).
-fn send_bgra(source: &NativeVideoSource, bgra: &[u8], stride: u32, w: u32, h: u32, max_h: u32, start: Instant) {
+fn send_bgra(source: &NativeVideoSource, bgra: &[u8], stride: u32, w: u32, h: u32, max_h: u32, start: Instant, preview: Option<&mut Preview>) {
     let (w, h) = (w & !1, h & !1); // I420 wants even sizes
     if w == 0 || h == 0 {
         return;
@@ -64,12 +64,16 @@ fn send_bgra(source: &NativeVideoSource, bgra: &[u8], stride: u32, w: u32, h: u3
     if (nw, nh) != (w, h) && nw > 0 && nh > 0 {
         buf = buf.scale(nw as i32, nh as i32);
     }
+    if let Some(p) = preview {
+        p.offer(&mut buf);
+    }
     let mut frame = VideoFrame::new(VideoRotation::VideoRotation0, buf);
     frame.timestamp_us = start.elapsed().as_micros() as i64;
     source.capture_frame(&frame);
 }
 
-/// Our own preview, at most ~15 times a second, at most 640 pixels wide.
+/// Our own preview: exactly what is sent (after the resolution limit), up to 30 times a second
+/// and up to 1920 pixels wide, scaled with libyuv's filtering so it's sharp when shown big.
 struct Preview {
     frames: Frames,
     key: String,
@@ -80,21 +84,25 @@ impl Preview {
     fn new(frames: Frames, key: String) -> Self {
         Preview { frames, key, last: Instant::now() - Duration::from_secs(1) }
     }
-    fn offer(&mut self, bgra: &[u8], stride: u32, w: u32, h: u32) {
-        if self.last.elapsed() < Duration::from_millis(66) || w == 0 || h == 0 {
+    fn offer(&mut self, buf: &mut I420Buffer) {
+        let (w, h) = (buf.width(), buf.height());
+        if self.last.elapsed() < Duration::from_millis(33) || w == 0 || h == 0 {
             return;
         }
         self.last = Instant::now();
-        let step = ((w + 639) / 640).max(1);
-        let (pw, ph) = (w / step, h / step);
-        let mut out = Vec::with_capacity((pw * ph * 4) as usize);
-        for yy in 0..ph {
-            let row = (yy * step * stride) as usize;
-            for xx in 0..pw {
-                let i = row + (xx * step * 4) as usize;
-                out.extend_from_slice(&bgra[i..i + 4]);
-            }
-        }
+        let small;
+        let src: &I420Buffer = if w > 1920 {
+            let ph = ((h as u64 * 1920 / w as u64) as u32) & !1;
+            small = buf.scale(1920, ph as i32);
+            &small
+        } else {
+            buf
+        };
+        let (pw, ph) = (src.width(), src.height());
+        let (sy, su, sv) = src.strides();
+        let (y, u, v) = src.data();
+        let mut out = vec![0u8; (pw * ph * 4) as usize];
+        yuv_helper::i420_to_argb(y, sy, u, su, v, sv, &mut out, pw * 4, pw as i32, ph as i32);
         self.frames.put(&self.key, pw, ph, out);
     }
 }
@@ -138,8 +146,7 @@ pub fn camera(frames: Frames, key: String, device: String, limits: Arc<Limits>, 
                         px[i + 3] = 255;
                     }
                 }
-                send_bgra(&src, &px, w * 4, w, h, limits.max_h.load(Ordering::Relaxed), start);
-                preview.offer(&px, w * 4, w, h);
+                send_bgra(&src, &px, w * 4, w, h, limits.max_h.load(Ordering::Relaxed), start, Some(&mut preview));
                 n += 1;
                 std::thread::sleep(limits.frame_time());
             }
@@ -182,8 +189,7 @@ pub fn camera(frames: Frames, key: String, device: String, limits: Arc<Limits>, 
             };
             fails = 0;
             if let Some(bgra) = to_bgra(&raw, fmt.format(), w, h) {
-                send_bgra(&src, &bgra, w * 4, w, h, limits.max_h.load(Ordering::Relaxed), start);
-                preview.offer(&bgra, w * 4, w, h);
+                send_bgra(&src, &bgra, w * 4, w, h, limits.max_h.load(Ordering::Relaxed), start, Some(&mut preview));
             }
         }
         let _ = cam.stop_stream();
@@ -305,8 +311,7 @@ pub fn screen(frames: Frames, key: String, source_id: Option<u64>, limits: Arc<L
         cap.start_capture(pick, move |r| match r {
             Ok(frame) => {
                 let (w, h) = (frame.width() as u32, frame.height() as u32);
-                send_bgra(&src, frame.data(), frame.stride(), w, h, lim.max_h.load(Ordering::Relaxed), start);
-                preview.offer(frame.data(), frame.stride(), w, h);
+                send_bgra(&src, frame.data(), frame.stride(), w, h, lim.max_h.load(Ordering::Relaxed), start, Some(&mut preview));
             }
             Err(CaptureError::Permanent) => f2.store(true, Ordering::SeqCst),
             Err(_) => {}
@@ -333,5 +338,32 @@ pub fn screen(frames: Frames, key: String, source_id: Option<u64>, limits: Arc<L
         Ok(Ok(())) => Ok(source),
         Ok(Err(e)) => Err(e),
         Err(_) => Err("no answer from screen capture".into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{fit, I420Buffer, Preview};
+    use crate::call::video::Frames;
+
+    #[test]
+    fn preview_is_sharp_and_paced() {
+        let frames = Frames::default();
+        let mut p = Preview::new(frames.clone(), "me:screen".into());
+        let mut buf = I420Buffer::new(2560, 1440);
+        p.offer(&mut buf);
+        let img = frames.get("me:screen").expect("a preview");
+        assert_eq!((img.width, img.height), (1920, 1080));
+        assert_eq!(img.take_pixels().len(), 1920 * 1080 * 4);
+        // A second frame right away is skipped (at most 30 previews a second).
+        p.offer(&mut buf);
+        assert_eq!(frames.get("me:screen").unwrap().seq, 1);
+    }
+
+    #[test]
+    fn fits_to_height() {
+        assert_eq!(fit(2560, 1440, 1080), (1920, 1080));
+        assert_eq!(fit(1920, 1080, 1440), (1920, 1080));
+        assert_eq!(fit(3841, 2161, 0), (3840, 2160));
     }
 }

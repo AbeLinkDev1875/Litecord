@@ -12,12 +12,20 @@ use libwebrtc::video_source::native::NativeVideoSource;
 use libwebrtc::video_stream::native::NativeVideoStream;
 use libwebrtc::video_track::RtcVideoTrack;
 
-/// One picture, in BGRA (the byte order GPUI draws).
+/// One picture, in BGRA (the byte order GPUI draws). The UI takes the pixels out (instead of
+/// copying 10+ MB a frame).
 pub struct Image {
     pub width: u32,
     pub height: u32,
-    pub bgra: Vec<u8>,
+    bgra: Mutex<Vec<u8>>,
     pub seq: u64,
+}
+
+impl Image {
+    /// The pixels, once (empty if they were already taken).
+    pub fn take_pixels(&self) -> Vec<u8> {
+        self.bgra.lock().map(|mut b| std::mem::take(&mut *b)).unwrap_or_default()
+    }
 }
 
 /// The newest picture of each video, by key: "<peer id>:<track id>" for others,
@@ -39,7 +47,7 @@ impl Frames {
     pub fn put(&self, key: &str, width: u32, height: u32, bgra: Vec<u8>) {
         if let Ok(mut m) = self.inner.lock() {
             let seq = m.get(key).map(|i| i.seq + 1).unwrap_or(1);
-            m.insert(key.to_string(), Arc::new(Image { width, height, bgra, seq }));
+            m.insert(key.to_string(), Arc::new(Image { width, height, bgra: Mutex::new(bgra), seq }));
         }
         if let Ok(w) = self.wake.lock() {
             if let Some(w) = w.as_ref() {
@@ -90,8 +98,8 @@ pub fn watch_remote(frames: &Frames, key: &str, track: RtcVideoTrack) {
             let mut stream = NativeVideoStream::new(track);
             let mut last = std::time::Instant::now() - std::time::Duration::from_secs(1);
             while let Some(f) = stream.next().await {
-                // At most 30 pictures a second for the UI.
-                if last.elapsed() < std::time::Duration::from_millis(30) {
+                // At most 60 pictures a second for the UI.
+                if last.elapsed() < std::time::Duration::from_millis(15) {
                     continue;
                 }
                 last = std::time::Instant::now();
